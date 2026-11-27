@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+# configuração local (pode ter a sua chave)
+config.local.json
+# pacote gerado da extensão
+*.zip

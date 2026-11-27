@@ -40,6 +40,16 @@ responde é a sua conta do ChatGPT, na aba do navegador, sem chave de API e sem 
   então a ponte descreve as ferramentas no prompt, lê a resposta e devolve `tool_calls`
   exatamente como a OpenAI devolveria. É o que deixa o OpenCode trabalhar como agente
   (ler, editar e criar arquivos, rodar comandos).
+- **Agente sólido**: toda conversa nova começa com um contrato fixo (o modelo trabalha pelas
+  ferramentas no seu PC, sem a personalização da conta) e cada passo lembra o formato e o
+  nome das ferramentas. Se o ChatGPT escrever um bloco de ferramenta quebrado, disser "não
+  tenho acesso" ou responder vazio, a ponte pede a correção na mesma conversa antes de
+  responder, sem o cliente ver o erro.
+- **Andamento visível**: enquanto o ChatGPT pensa, o cliente recebe linhas de andamento no
+  bloco de raciocínio (no OpenCode aparecem como "pensando"): fila, mensagem enviada, há
+  quanto tempo está esperando, correções.
+- **Monitor ao vivo**: uma página da extensão mostra cada chamada com etapas, tempos, a
+  resposta chegando, as chamadas de ferramenta e o prompt enviado.
 - **Conversas reaproveitadas**: a cada passo do agente, a ponte reconhece o histórico e manda
   ao ChatGPT só o que é novo (o resultado da ferramenta), na mesma conversa da aba.
 - **Sem dependências**: a ponte é Node.js puro e a extensão não precisa de nada além do Chrome.
@@ -164,20 +174,26 @@ ou num arquivo `config.local.json` na pasta do projeto.
 | `--origem <url>` | — | nenhuma | Libera um site para chamar a API pelo navegador (CORS). Pode repetir. |
 | `--sem-reaproveitar` | — | desligado | Sempre abre conversa nova e manda o histórico inteiro. |
 | `--simular` | — | desligado | Responde sem navegador, para testar a ligação. |
+| `--sem-progresso` | — | desligado | Não escreve o andamento no bloco de raciocínio do cliente. |
 | `--log <nível>` | `GPT_PONTE_LOG` | `info` | `debug` mostra um resumo de cada pedido (sem o conteúdo). |
 
 Todas as opções, inclusive tempos limite, estão em [docs/referencia.md](docs/referencia.md).
 
 ### Extensão
 
-No ícone da extensão, em **Configurações**:
+Na frente do popup (ícone da extensão):
+
+- **Chat temporário** (interruptor): ligado, as conversas novas da ponte não aparecem no seu
+  histórico nem usam a memória do ChatGPT; desligado, aparecem no histórico. Vale na hora.
+- **Abrir o monitor das chamadas**: página que mostra cada chamada ao vivo (estado, etapas,
+  tempos, resposta chegando, ferramentas, prompt enviado e erros).
+
+Em **Configurações**:
 
 - **Endereço da ponte**: `ws://127.0.0.1:4545/extensao` (mude se usar outra porta).
 - **Abas ao mesmo tempo**: quantas respostas podem rodar em paralelo (1 a 4; o padrão é 2,
   porque o OpenCode pede o título da sessão junto com a primeira resposta).
 - **Como enviar o texto**: *Automático* (recomendado) ou *Digitar o texto no campo*.
-- **Usar chats temporários**: as conversas da ponte não aparecem no seu histórico nem usam a
-  memória do ChatGPT (ligado por padrão).
 - **Fixar as abas de trabalho**: deixa a aba de trabalho fixada à esquerda.
 - O **interruptor** no topo liga e desliga a extensão.
 
@@ -215,6 +231,7 @@ No ícone da extensão, em **Configurações**:
 
 | Sintoma | O que fazer |
 |---|---|
+| Não vejo a aba do ChatGPT trabalhando | Ela fica fixada e em segundo plano, à esquerda da sua janela; clique nela. Ou abra o **monitor** pelo popup. |
 | Popup mostra **ponte desconectada** | Inicie a ponte (`iniciar.bat`) e clique em **Tentar de novo**. |
 | Erro **503: A extensão GPT Ponte não está conectada** | Abra o Chrome com a extensão ativa; clicar no ícone dela conecta na hora. |
 | Erro **pediu uma verificação** | Abra a aba de trabalho do ChatGPT e resolva o captcha. |

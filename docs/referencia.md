@@ -36,6 +36,7 @@ ambiente → argumentos.
 | `--origem <url>` | — | `origens` (lista) | `[]` | Sites liberados para chamar a API pelo navegador. `*` libera todos (não recomendado). |
 | `--sem-reaproveitar` | — | `reaproveitarConversas: false` | ligado | Desliga a continuação de conversas. |
 | `--simular` | — | `simular: true` | desligado | Respostas simuladas, sem navegador. |
+| `--sem-progresso` | — | `progresso: false` | ligado | Não escreve o andamento (`[GPT Ponte] ...`) no `reasoning_content`. |
 | `--log <nível>` | `GPT_PONTE_LOG` | `log` | `info` | `debug`, `info`, `aviso` ou `erro`. |
 | `--config <arq>` | — | — | `config.local.json` | Outro arquivo de configuração. |
 | — | — | `esperaExtensaoMs` | `30000` | Quanto um pedido espera a extensão conectar. |
@@ -60,7 +61,7 @@ Configurações da extensão (popup → Configurações):
 | Endereço da ponte | `ws://127.0.0.1:4545/extensao` | Onde a extensão procura a ponte. |
 | Abas ao mesmo tempo | `2` | De 1 a 4. Cada aba atende uma resposta por vez. |
 | Como enviar o texto | Automático | *Automático* troca um marcador pelo prompt no pedido; *Digitar* escreve o prompt inteiro no campo. |
-| Usar chats temporários | ligado | Conversas fora do histórico e sem a memória do ChatGPT. |
+| Chat temporário (interruptor na frente do popup e no monitor) | ligado | Conversas novas fora do histórico e sem a memória do ChatGPT. Vale na hora. |
 | Fixar as abas de trabalho | ligado | Abas de trabalho fixadas à esquerda. |
 | Interruptor (topo) | ligado | Desligado, a extensão se desconecta e não atende pedidos. |
 
@@ -149,7 +150,9 @@ data: [DONE]
 
 - O primeiro pedaço traz `"role": "assistant"`.
 - Cada chamada de ferramenta chega inteira num pedaço só (nome e argumentos completos).
-- Raciocínio chega como `delta.reasoning_content`.
+- Raciocínio chega como `delta.reasoning_content`. Antes do texto, a ponte também manda ali
+  linhas de andamento (`[GPT Ponte] mensagem enviada...`, `esperando o ChatGPT… 20 s`), a menos
+  que você use `--sem-progresso`.
 - A cada 15 s sem dados a ponte manda um comentário SSE (`: gpt-ponte`) para a conexão não
   cair enquanto o modelo pensa.
 
@@ -190,6 +193,7 @@ WebSocket em `ws://127.0.0.1:<porta>/extensao`, mensagens JSON. Versão do proto
 |---|---|---|
 | `ola` | `protocolo`, `versao`, `navegador`, `config: {maxAbas, temporario}` | Ao conectar (e quando a configuração muda). |
 | `estado` | `maxAbas`, `abas: [{id, estado, conversaId, conversaServidor, frontend, logado, aviso}]`, `logado` | Sempre que algo muda nas abas. |
+| `etapa` | `id`, `etapa` (`abrindo-aba` ou `enviado`), `detalhe`, `aba` | Andamento antes da resposta (vira linha de andamento no cliente). |
 | `inicio` | `id`, `aba`, `conversaId` | A resposta começou a chegar. |
 | `delta` | `id`, `texto`, `raciocinio` | Texto novo (só o que cresceu). |
 | `fim` | `id`, `texto`, `raciocinio`, `aba`, `conversaId`, `modelo` | Resposta completa (o `texto` final vale mais que a soma dos deltas). |
@@ -202,7 +206,7 @@ WebSocket em `ws://127.0.0.1:<porta>/extensao`, mensagens JSON. Versão do proto
 | `tipo` | Campos | Quando |
 |---|---|---|
 | `bemvindo` | `protocolo`, `versao` | Ao aceitar a conexão. |
-| `tarefa` | `id`, `prompt`, `nova`, `continuar: {aba, conversaId} \| null`, `modelo` | Um pedido para o ChatGPT. |
+| `tarefa` | `id`, `prompt`, `nova`, `continuar: {aba, conversaId} \| null`, `modelo`, `rotulo` | Um pedido para o ChatGPT. O `rotulo` (conversa nova, continuação, correção) aparece no monitor. |
 | `cancelar` | `id` | O cliente desistiu ou o tempo acabou. |
 | `ping` | `t` | A cada 20 s (mantém o service worker vivo). |
 
@@ -223,5 +227,10 @@ Entre o content script e o script da página (`window.postMessage`, `canal: "gpt
 | página → conteúdo | `erro-http` (`status`, `corpo`) | O site respondeu com erro HTTP. |
 
 Entre o content script e o service worker (porta `aba-chatgpt`): `pronta`, `problema`,
-`inicio`, `delta`, `fim`, `erro`, `log` (da aba para o service worker) e `executar`,
-`cancelar`, `info` (do service worker para a aba).
+`enviado`, `inicio`, `delta`, `fim`, `erro`, `acordar`, `log` (da aba para o service worker) e
+`executar`, `cancelar`, `info` (do service worker para a aba).
+
+Entre o monitor e o service worker (porta `monitor`): `monitor:inicio` (todas as tarefas e o
+estado), `monitor:tarefa` (uma tarefa mudou), `monitor:delta` (texto novo), `monitor:estado`,
+`monitor:lista` e `monitor:prompt` (do service worker para o monitor); `monitor:prompt` e
+`monitor:limpar` (do monitor para o service worker).

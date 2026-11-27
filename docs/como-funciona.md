@@ -8,6 +8,8 @@ quem quer entender, auditar ou modificar a ponte.
 - [O marcador](#o-marcador)
 - [Lendo a resposta do site](#lendo-a-resposta-do-site)
 - [Ferramentas emuladas](#ferramentas-emuladas)
+- [O contrato e as correções automáticas](#o-contrato-e-as-correções-automáticas)
+- [Andamento e monitor](#andamento-e-monitor)
 - [Reaproveitamento de conversas](#reaproveitamento-de-conversas)
 - [Abas, fila e o service worker](#abas-fila-e-o-service-worker)
 - [Erros e novas tentativas](#erros-e-novas-tentativas)
@@ -173,6 +175,56 @@ Cada chamada vira um `tool_call` com id `call_` + 24 caracteres, como na OpenAI.
 `tool_choice` (`required`, `none` ou uma função) e `parallel_tool_calls: false` viram
 instruções extras; com `tool_choice: "none"` a ponte nem procura blocos na resposta.
 
+## O contrato e as correções automáticas
+
+Para o agente se comportar como numa API de verdade, a ponte fixa algumas regras e corrige
+os desvios sozinha.
+
+**Contrato.** Toda conversa nova com ferramentas começa com o mesmo texto (em
+`montarPromptInicial`, `servidor/prompt.js`), na voz de quem usa o app:
+
+- o texto em `<system_instructions>` é o prompt de sistema;
+- a personalização da conta (instruções personalizadas, memórias, outros chats) não vale
+  naquela conversa;
+- o modelo trabalha pelas ferramentas: ele escreve o pedido e o app executa no computador,
+  então ele deve fazer o trabalho em vez de mandar o usuário rodar comandos;
+- escrever só a próxima resposta, sem comentar o arranjo.
+
+Em cada passo seguinte vai um lembrete curto com o formato do bloco e o **nome de todas as
+ferramentas**, porque em conversas longas o ChatGPT esquece o começo.
+
+**Correções na mesma conversa.** Depois de cada resposta, antes de devolver ao cliente, a
+ponte confere:
+
+| Problema | O que a ponte faz | Quantas vezes |
+|---|---|---|
+| Bloco `<tool_call>` com JSON inválido ou ferramenta que não existe | Devolve o motivo ao modelo ("there is no tool named X. Available tools: ...") e pede o bloco de novo | até 2 |
+| Recusa no começo ("não tenho acesso ao seu computador", "I can't run commands") | Segura o começo da resposta (até 400 caracteres); se for recusa, ela não chega ao cliente e a ponte lembra o modelo de que as ferramentas funcionam | 1 |
+| Resposta vazia (por exemplo, foi para um canvas) | Pede a resposta de novo, direto no chat | 1 |
+
+A vigia de recusa só vale quando o pedido termina com uma mensagem do usuário: depois de um
+resultado de ferramenta, "não consigo abrir esse arquivo" pode ser a resposta certa. Se as
+correções se esgotarem, os blocos que sobraram viram texto, para o cliente ver o que houve.
+Cada correção é uma mensagem a mais na mesma conversa do ChatGPT; o cliente só recebe a
+versão boa.
+
+## Andamento e monitor
+
+**No cliente.** Enquanto o ChatGPT não escreve, a ponte manda pedaços de
+`reasoning_content` com linhas `[GPT Ponte] ...`: fila, conversa nova ou continuação, página
+carregando, mensagem enviada (com o tamanho), "esperando o ChatGPT… N s" a cada 10 segundos e
+as correções automáticas. O OpenCode mostra isso no bloco de raciocínio ("pensando"). Quando
+o site manda o raciocínio de verdade do modelo, ele vem logo depois. As linhas de andamento
+não entram na conta de tokens. `--sem-progresso` desliga.
+
+O stream só é aberto quando a tarefa já foi entregue à extensão; até lá, os erros ainda saem
+com o status HTTP certo (por exemplo, `503` se a extensão não estiver conectada).
+
+**No monitor.** O service worker guarda as últimas 40 tarefas (`extensao/historico.js`), com
+etapas e horários, o texto e o raciocínio chegando, o erro e o prompt enviado, e avisa ao vivo
+as páginas `monitor.html` abertas. Os dados ficam em `chrome.storage.session` (somem quando o
+navegador fecha) e não saem do navegador.
+
 ## Reaproveitamento de conversas
 
 A API é sem estado: o cliente manda o histórico inteiro a cada pedido. O ChatGPT é com estado:
@@ -221,6 +273,9 @@ nova.
 - **Content script**: espera o campo de mensagem com `MutationObserver`, que não sofre a
   limitação de timers das abas em segundo plano. Também detecta verificação anti-robô
   (Cloudflare), falta de login e alertas de erro na página.
+- **Aba que acorda**: uma aba carregada em segundo plano às vezes não desenha o campo de
+  mensagem até ficar visível. Se o campo não aparece em 8 segundos com a aba escondida, a
+  extensão traz a aba à frente por 2,5 segundos e volta para a aba em que você estava.
 
 ## Erros e novas tentativas
 

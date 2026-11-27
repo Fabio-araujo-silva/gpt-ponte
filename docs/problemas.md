@@ -10,6 +10,7 @@ Para separar problema da ponte de problema do navegador, rode a ponte com `--sim
 seu programa funciona assim, a ligação com ele está certa e o problema está no lado do
 navegador.
 
+- [Não vejo o andamento nem a aba trabalhando](#não-vejo-o-andamento-nem-a-aba-trabalhando)
 - [A extensão não conecta na ponte](#a-extensão-não-conecta-na-ponte)
 - [Erro 503: a extensão não está conectada](#erro-503-a-extensão-não-está-conectada)
 - [A porta já está em uso](#a-porta-já-está-em-uso)
@@ -24,6 +25,16 @@ navegador.
 - [Respostas lentas ou tempo esgotado](#respostas-lentas-ou-tempo-esgotado)
 - [Erro 403: origem não permitida](#erro-403-origem-não-permitida)
 - [Mensagem grande demais](#mensagem-grande-demais)
+
+## Não vejo o andamento nem a aba trabalhando
+
+- A **aba de trabalho** fica fixada e em segundo plano, no canto esquerdo da janela do Chrome
+  (de propósito, para não roubar o foco). Clique nela para assistir.
+- O **monitor** (botão no popup) mostra cada chamada ao vivo: etapas, tempos, a resposta
+  chegando, as chamadas de ferramenta e o prompt enviado.
+- No **OpenCode**, o andamento aparece no bloco de raciocínio ("pensando"), com linhas
+  `[GPT Ponte] ...`. Se não aparecer, confira se a ponte não está com `--sem-progresso` e se a
+  versão da ponte é a 0.2.0 ou mais nova.
 
 ## A extensão não conecta na ponte
 

@@ -217,10 +217,16 @@ Só as instruções de sistema e as ferramentas do OpenCode 2 ocupam cerca de 34
 - **Passos seguintes**: cada chamada de ferramenta vira uma mensagem curta na mesma conversa
   (só o resultado da ferramenta). No terminal da ponte, `✚` marca conversa nova e `↪` marca
   continuação.
+- **Andamento**: enquanto o ChatGPT pensa, o bloco de raciocínio do OpenCode mostra linhas
+  `[GPT Ponte] ...` (mensagem enviada, esperando há N s, correções). Para ver tudo em detalhe,
+  abra o **monitor** pelo popup da extensão.
+- **Correções invisíveis**: se o ChatGPT errar o formato de uma chamada de ferramenta, disser
+  que não tem acesso ou responder vazio, a ponte corrige na mesma conversa antes de responder
+  (veja [como-funciona.md](como-funciona.md#o-contrato-e-as-correções-automáticas)).
 - **Velocidade**: alguns segundos a mais por passo que na API, porque cada resposta passa pela
   página.
-- **Histórico**: com *chats temporários* ligados (padrão), nada disso aparece no histórico do
-  ChatGPT.
+- **Histórico**: com o interruptor *Chat temporário* ligado (padrão), nada disso aparece no
+  histórico do ChatGPT. Desligue no popup se quiser rever as conversas no site.
 
 ## Dicas
 

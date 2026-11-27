@@ -28,12 +28,20 @@ export class Simulador {
     };
   }
 
+  /** Mesma regra da extensão: aba nova se couber; senão, a aba livre usada há mais tempo. */
+  escolherAba() {
+    if (this.conversas.size < this.maxAbas) return this.proximaAba++;
+    const livres = [...this.conversas.entries()].filter(([, c]) => !c.ocupada).sort((a, b) => a[1].usadoEm - b[1].usadoEm);
+    if (!livres.length) throw new ErroDaPonte('sem_aba', 'Todas as abas simuladas estão ocupadas.');
+    return livres[0][0];
+  }
+
   async executar(tarefa, { aoEvento = () => {}, sinal } = {}) {
     this.historico.push(tarefa);
     let aba;
     if (tarefa.nova) {
-      aba = this.conversas.size < this.maxAbas ? this.proximaAba++ : [...this.conversas.keys()][0];
-      this.conversas.set(aba, { id: `sim-${this.proximaConversa++}`, turnos: 0 });
+      aba = this.escolherAba();
+      this.conversas.set(aba, { id: `sim-${this.proximaConversa++}`, turnos: 0, usadoEm: 0, ocupada: false });
     } else {
       aba = tarefa.continuar?.aba;
       const c = this.conversas.get(aba);
@@ -43,17 +51,22 @@ export class Simulador {
     }
     const conversa = this.conversas.get(aba);
     conversa.turnos++;
-    aoEvento({ tipo: 'inicio', aba, conversaId: conversa.id });
-
-    const resposta = this.responder(tarefa.prompt, conversa);
-    const pedacos = resposta.match(/[\s\S]{1,7}/g) ?? [];
-    for (const p of pedacos) {
+    conversa.ocupada = true;
+    try {
+      aoEvento({ tipo: 'inicio', aba, conversaId: conversa.id });
+      const resposta = this.responder(tarefa.prompt, conversa);
+      const pedacos = resposta.match(/[\s\S]{1,7}/g) ?? [];
+      for (const p of pedacos) {
+        if (sinal?.aborted) throw new ErroDaPonte('cancelado');
+        if (this.atrasoMs) await new Promise((r) => setTimeout(r, this.atrasoMs));
+        aoEvento({ tipo: 'texto', texto: p });
+      }
       if (sinal?.aborted) throw new ErroDaPonte('cancelado');
-      if (this.atrasoMs) await new Promise((r) => setTimeout(r, this.atrasoMs));
-      aoEvento({ tipo: 'texto', texto: p });
+      return { texto: resposta, raciocinio: '', aba, conversaId: conversa.id, modelo: 'simulador' };
+    } finally {
+      conversa.ocupada = false;
+      conversa.usadoEm = Date.now();
     }
-    if (sinal?.aborted) throw new ErroDaPonte('cancelado');
-    return { texto: resposta, raciocinio: '', aba, conversaId: conversa.id, modelo: 'simulador' };
   }
 
   responder(promptCompleto, conversa) {

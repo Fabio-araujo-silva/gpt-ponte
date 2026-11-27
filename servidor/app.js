@@ -75,11 +75,13 @@ export function criarPonte(config, { log = logMudo, executor } = {}) {
     return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h.endsWith('.localhost') || /^127\.\d+\.\d+\.\d+$/.test(h);
   }
 
-  function origemPermitida(req) {
+  function origemPermitida(req, rota) {
     const origem = req.headers.origin;
     if (!origem || origem === 'null') return { ok: !origem, cors: null };
     if (origem === `http://${req.headers.host}`) return { ok: true, cors: null };
     if (config.origens.includes('*') || config.origens.includes(origem)) return { ok: true, cors: origem };
+    // A extensão confere se a ponte está no ar antes de abrir o WebSocket.
+    if (ORIGEM_EXTENSAO.test(origem) && ['/saude', '/health', '/estado'].includes(rota)) return { ok: true, cors: origem };
     return { ok: false, cors: null };
   }
 
@@ -112,7 +114,7 @@ export function criarPonte(config, { log = logMudo, executor } = {}) {
       enviarJson(res, 403, new ErroDaPonte('origem_bloqueada', 'Host não permitido.').paraOpenAI());
       return;
     }
-    const origem = origemPermitida(req);
+    const origem = origemPermitida(req, rota);
     if (!origem.ok) {
       enviarJson(res, 403, new ErroDaPonte('origem_bloqueada', `Origem ${req.headers.origin} não permitida. Use --origem para liberar.`).paraOpenAI());
       return;

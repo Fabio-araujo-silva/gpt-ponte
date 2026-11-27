@@ -276,6 +276,9 @@ test('segurança: sites, Host estranho, chave e origem do WebSocket', async () =
   assert.equal(await pedidoCru(p.base, { metodo: 'POST', caminho: '/v1/chat/completions', cabecalhos: { ...comChave, Origin: 'https://site-malicioso.com' }, corpo: json }), 403);
   // A própria página da ponte pode:
   assert.equal(await pedidoCru(p.base, { metodo: 'POST', caminho: '/v1/chat/completions', cabecalhos: { ...comChave, Origin: p.base }, corpo: json }), 200);
+  // A extensão pode conferir a saúde da ponte, mas não chamar a API:
+  assert.equal(await pedidoCru(p.base, { caminho: '/saude', cabecalhos: { Origin: 'chrome-extension://abcdef' } }), 200);
+  assert.equal(await pedidoCru(p.base, { metodo: 'POST', caminho: '/v1/chat/completions', cabecalhos: { ...comChave, Origin: 'chrome-extension://abcdef' }, corpo: json }), 403);
   // DNS rebinding (Host de outro domínio apontando para 127.0.0.1):
   assert.equal(await pedidoCru(p.base, { cabecalhos: { ...comChave, Host: 'evil.example.com' } }), 403);
   assert.equal(await pedidoCru(p.base, { cabecalhos: { ...comChave, Host: 'localhost:4545' } }), 200);

@@ -52,7 +52,7 @@
         }
       };
       const obs = new MutationObserver(checar);
-      obs.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: false });
+      obs.observe(document, { subtree: true, childList: true, attributes: true, characterData: false });
       const intervalo = setInterval(checar, 250);
       const limite = setTimeout(() => {
         if (feito) return;
@@ -293,17 +293,17 @@
         throw erroComCodigo('pagina_mudou', 'Não consegui escrever no campo de mensagem do ChatGPT.');
       }
       await dormir(80);
-      await apertarEnviar(campo);
-      if (porMarcador) vigiarMarcador(tarefa.id, marcador);
-      // O script da página avisa quando o pedido saiu ("enviado") e quando o stream começa.
+      // O script da página avisa quando o pedido saiu ("enviado"); sem isso em 20 s, algo deu errado.
       atual.vigia = setTimeout(() => {
         if (atual && atual.id === tarefa.id && !atual.enviado) {
           postarPagina({ tipo: 'desarmar', id: tarefa.id });
           const d = diagnosticar();
           limparCampo(acharCampo());
-          falhar(d.codigo === 'pagina_mudou' ? 'pagina_mudou' : d.codigo, d.codigo === 'pagina_mudou' ? 'A mensagem não saiu: o ChatGPT não enviou o pedido. ' + d.mensagem : d.mensagem);
+          falhar(d.codigo, d.codigo === 'pagina_mudou' ? 'A mensagem não saiu: o ChatGPT não enviou o pedido. ' + d.mensagem : d.mensagem);
         }
       }, 20000);
+      await apertarEnviar(campo);
+      if (porMarcador) vigiarMarcador(tarefa.id, marcador);
     } catch (e) {
       falhar(e.codigo || 'chatgpt', e.message || String(e));
     }
@@ -416,18 +416,21 @@
 
   // ------------------------------------------------------------------ selo na página
 
+  let hospedeDoSelo = null;
+
   function atualizarSelo() {
     if (!document.body) return;
     if (!selo) {
-      const host = document.createElement('div');
-      host.id = 'gpt-ponte-selo';
-      host.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483647;pointer-events:none;';
-      const sombra = host.attachShadow({ mode: 'open' });
+      hospedeDoSelo = document.createElement('div');
+      hospedeDoSelo.id = 'gpt-ponte-selo';
+      hospedeDoSelo.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483647;pointer-events:none;';
+      const sombra = hospedeDoSelo.attachShadow({ mode: 'open' });
       sombra.innerHTML =
         '<style>div{font:12px/1.4 system-ui,sans-serif;background:rgba(20,22,28,.86);color:#fff;padding:5px 10px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.25)}b{color:#7ee0a6}</style><div></div>';
-      document.body.appendChild(host);
       selo = sombra.querySelector('div');
     }
+    // O site pode refazer o <body>: recoloca o selo se ele sumiu.
+    if (!hospedeDoSelo.isConnected) document.body.appendChild(hospedeDoSelo);
     selo.innerHTML = atual ? '<b>●</b> GPT Ponte: respondendo…' : '<b>●</b> GPT Ponte: aba de trabalho (não use para conversar)';
   }
 

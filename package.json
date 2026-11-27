@@ -8,10 +8,10 @@
   },
   "scripts": {
     "start": "node servidor/index.js",
-    "test": "node --test testes/"
+    "test": "node --test \"testes/**/*.test.js\""
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "keywords": [
     "chatgpt",

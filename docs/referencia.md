@@ -12,13 +12,16 @@
 ```
 node servidor/index.js [opções]                 inicia a ponte
 node servidor/index.js opencode [--instalar]     mostra/grava a configuração do OpenCode
+node servidor/index.js opencode --perfil [pasta] cria o perfil "só ChatGPT" do OpenCode
 node servidor/index.js teste ["pergunta"]        pergunta algo à ponte que já está rodando
+node servidor/index.js saude [--esperar <s>]     diz se a ponte está no ar (código de saída 0/1)
 node servidor/index.js --ajuda                   ajuda
 node servidor/index.js --versao                  versão
 ```
 
 `iniciar.bat` (Windows) e `iniciar.sh` (macOS/Linux) chamam o primeiro comando e repassam as
-opções. `npm start` também funciona.
+opções. `npm start` também funciona. `opencode-chatgpt.bat`/`.sh` abrem o OpenCode só com o
+ChatGPT (veja [opencode.md](opencode.md#só-o-chatgpt-opencode-chatgpt)).
 
 ## Configuração
 

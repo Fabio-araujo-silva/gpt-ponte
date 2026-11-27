@@ -4,6 +4,7 @@ O [OpenCode](https://opencode.ai) é um agente de programação de terminal. Com
 passa a usar o ChatGPT do seu navegador como modelo, inclusive para ler, editar e criar
 arquivos e rodar comandos.
 
+- [Só o ChatGPT: opencode-chatgpt](#só-o-chatgpt-opencode-chatgpt)
 - [Configuração automática](#configuração-automática)
 - [Configuração manual](#configuração-manual)
 - [Escolher o modelo](#escolher-o-modelo)
@@ -11,6 +12,49 @@ arquivos e rodar comandos.
 - [O que esperar](#o-que-esperar)
 - [Dicas](#dicas)
 - [Problemas no OpenCode](#problemas-no-opencode)
+
+## Só o ChatGPT: opencode-chatgpt
+
+O jeito mais simples de usar o OpenCode com o ChatGPT como **motor único** (modelo principal
+**e** os títulos das sessões) é o lançador que vem no projeto. Na pasta do seu projeto, rode:
+
+```sh
+D:\caminho\para\gpt-ponte\opencode-chatgpt.bat      # Windows
+/caminho/para/gpt-ponte/opencode-chatgpt.sh          # macOS / Linux
+```
+
+Ele:
+
+1. confere se a ponte está rodando e, se não estiver, abre a ponte numa janela separada;
+2. na primeira vez, cria um **perfil próprio do OpenCode** em `gpt-ponte/perfil-opencode/`,
+   com `model` e `small_model` apontando para `gpt-ponte/chatgpt` e nenhum outro provedor;
+3. abre o OpenCode com `XDG_CONFIG_HOME` apontando para esse perfil e `--standalone` (um
+   servidor só dele, que lê só esse perfil).
+
+A sua configuração normal do OpenCode **não é tocada**: rodando `opencode` normalmente, tudo
+continua como antes. As opções passam direto para o OpenCode
+(`opencode-chatgpt.bat --continue`, `opencode-chatgpt.bat run "explique este projeto"`).
+
+Para chamar de qualquer pasta só como `opencode-chatgpt`, ponha a pasta da ponte no PATH, ou
+crie um atalho numa pasta que já está no PATH. No Windows, por exemplo, um arquivo
+`opencode-chatgpt.cmd` com:
+
+```bat
+@echo off
+call "D:\caminho\para\gpt-ponte\opencode-chatgpt.bat" %*
+```
+
+Detalhes que valem saber:
+
+- **Por que `--standalone`**: no OpenCode 2, o comando `opencode` normal conversa com um serviço
+  de fundo que já está rodando com a sua configuração normal; sem `--standalone`, o perfil
+  seria ignorado.
+- O perfil é separado de propósito: plugins, servidores MCP, agentes e permissões da sua
+  configuração normal não entram nele. Para usá-los também, copie os trechos para
+  `perfil-opencode/opencode/opencode.jsonc` (o arquivo é seu, pode editar).
+- As sessões ficam no mesmo banco do OpenCode, então aparecem nas duas formas de abrir.
+- Mudou a porta ou a chave da ponte? Recrie o perfil:
+  `node servidor/index.js opencode --perfil --porta 5050`.
 
 ## Configuração automática
 

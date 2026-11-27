@@ -90,8 +90,20 @@ trabalho**: deixe-a aberta e não converse por ela (o selo no canto da página a
 
 ## Usar no OpenCode
 
-Com a ponte rodando, um comando adiciona a ponte como provedor no OpenCode (com backup do
-arquivo anterior e sem mexer no resto da sua configuração):
+**Só com o ChatGPT (motor único)**: na pasta do seu projeto, rode o lançador do projeto.
+
+```sh
+D:\caminho\para\gpt-ponte\opencode-chatgpt.bat      # Windows
+/caminho/para/gpt-ponte/opencode-chatgpt.sh          # macOS / Linux
+```
+
+Ele sobe a ponte se ela não estiver rodando e abre o OpenCode num perfil próprio, em que o
+modelo principal **e** os títulos das sessões vão para o ChatGPT. A sua configuração normal
+do OpenCode fica intacta. Detalhes em [docs/opencode.md](docs/opencode.md#só-o-chatgpt-opencode-chatgpt).
+
+**Como mais um provedor** na sua configuração normal: com a ponte rodando, um comando
+adiciona a ponte como provedor no OpenCode (com backup do arquivo anterior e sem mexer no
+resto da sua configuração):
 
 ```sh
 node servidor/index.js opencode --instalar

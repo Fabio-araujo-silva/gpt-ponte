@@ -35,7 +35,9 @@ test('sistema e ferramentas entram no prompt inicial', () => {
   const p = montarPromptInicial(msgs, { ferramentas: FERRAMENTAS });
   assert.match(p, /<system_instructions>\nVocê é um agente de código\.\n<\/system_instructions>/);
   assert.match(p, /<tools>[\s\S]*### bash[\s\S]*<\/tools>/);
-  assert.match(p, /The user says:\n\nListe os arquivos\.$/);
+  assert.match(p, /<user_message>\nListe os arquivos\.\n<\/user_message>/);
+  assert.match(p, /Example, with a hypothetical tool named "read"/);
+  assert.match(p, /write the request block \(the block alone is enough\)\.$/);
 });
 
 test('histórico com chamadas e resultados vira uma conversa legível', () => {
@@ -50,7 +52,7 @@ test('histórico com chamadas e resultados vira uma conversa legível', () => {
   assert.match(p, /<message role="user">\nU1\n<\/message>/);
   assert.match(p, /<message role="assistant">\nVou ver\.\n<tool_call>\n\{"name":"bash","arguments":\{"command":"ls"\}\}\n<\/tool_call>\n<\/message>/);
   assert.match(p, /<tool_result name="bash" call_id="call_1">\na\.txt\n<\/tool_result>/);
-  assert.match(p, /Now write the next assistant reply\.$/);
+  assert.match(p, /Now write the next assistant reply\. If you need a tool, write the request block \(the block alone is enough\)\.$/);
 });
 
 test('continuação manda só resultados e a mensagem nova', () => {

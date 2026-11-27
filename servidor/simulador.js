@@ -56,7 +56,9 @@ export class Simulador {
     return { texto: resposta, raciocinio: '', aba, conversaId: conversa.id, modelo: 'simulador' };
   }
 
-  responder(prompt, conversa) {
+  responder(promptCompleto, conversa) {
+    // As instruções de ferramentas têm um exemplo de <tool_result>: olha só o que vem fora delas.
+    const prompt = promptCompleto.replace(/<tools>[\s\S]*?<\/tools>/, '');
     const pedido = /\/ferramenta\s+([\w.-]+)\s*(\{[\s\S]*?\})?\s*$/m.exec(prompt);
     if (pedido && !/<tool_result\s/.test(prompt)) {
       return `Vou usar a ferramenta ${pedido[1]}.\n<tool_call>\n{"name": "${pedido[1]}", "arguments": ${pedido[2] || '{}'}}\n</tool_call>`;

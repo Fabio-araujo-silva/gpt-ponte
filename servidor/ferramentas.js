@@ -50,19 +50,31 @@ export function lerFerramentas(tools) {
 export function instrucoesDeFerramentas(ferramentas, { toolChoice, paralelas = true } = {}) {
   if (!ferramentas.length) return '';
   const regras = [
-    'You can call the tools listed below. To call a tool, write a block exactly like this, with valid JSON inside the tags:',
+    // Testado no chatgpt.com: dizer "as ferramentas são suas" faz o modelo responder que não
+    // tem acesso; explicar que ELE PEDE e O APP EXECUTA funciona melhor (e é a verdade).
+    "You can't run anything yourself here, but the app can: when you need one of the tools below, write a request block in the exact format shown. The app runs the request (for example on the user's computer) and sends you the result in the next message, inside <tool_result> tags. That is how you work in this app, so do not say you lack access and do not ask the user to do what a tool can do: write the request block.",
     '',
+    'Request format (valid JSON between the tags):',
     ABRE,
-    '{"name": "TOOL_NAME", "arguments": {"param": "value"}}',
+    '{"name": "<tool name>", "arguments": {<arguments as JSON>}}',
     FECHA,
+    '',
+    'Example, with a hypothetical tool named "read":',
+    'user: What is in package.json?',
+    'assistant:',
+    ABRE,
+    '{"name": "read", "arguments": {"path": "package.json"}}',
+    FECHA,
+    'user: <tool_result name="read">{"name": "demo"}</tool_result>',
+    'assistant: The package is called "demo".',
     '',
     'Rules:',
     paralelas
-      ? '- You may call several tools in the same reply by writing several blocks.'
-      : '- Call at most ONE tool per reply.',
-    '- After your tool call block(s), STOP and end your reply. Never write the results yourself: they will arrive in the next message inside <tool_result> tags.',
-    '- Do not wrap the blocks in code fences. Strings inside the JSON must be escaped as usual (\\n for new lines, \\" for quotes).',
-    '- Use only these tools. Do not use your own built-in tools (web browsing, Python, canvas, image generation, memory) for this conversation.',
+      ? '- You may write several request blocks in the same reply.'
+      : '- Write at most ONE request block per reply.',
+    '- After your request block(s), STOP and end your reply. Never write the results yourself.',
+    '- Do not put the blocks inside code fences. Escape strings in the JSON as usual (\\n for new lines, \\" for quotes).',
+    '- Only use the tools listed here, not your own built-in tools (web browsing, Python, canvas, image generation, memory).',
     '- If no tool is needed, just answer normally, without any block.',
   ];
   const obrigacao = descreverEscolha(toolChoice);
@@ -77,16 +89,16 @@ export function instrucoesDeFerramentas(ferramentas, { toolChoice, paralelas = t
 }
 
 function descreverEscolha(toolChoice) {
-  if (toolChoice === 'required') return '- In this reply you MUST call at least one tool.';
-  if (toolChoice === 'none') return '- In this reply you must NOT call any tool.';
+  if (toolChoice === 'required') return '- In this reply you MUST write at least one request block.';
+  if (toolChoice === 'none') return '- In this reply you must NOT write any request block.';
   const nome = toolChoice?.function?.name || toolChoice?.name;
-  if (nome) return `- In this reply you MUST call the tool "${nome}".`;
+  if (nome) return `- In this reply you MUST write a request block for the tool "${nome}".`;
   return '';
 }
 
 /** Lembrete curto que vai junto de cada continuação da conversa. */
 export function lembreteDeFerramentas() {
-  return `(Reminder: to use a tool, reply with ${ABRE}{"name": ..., "arguments": {...}}${FECHA} blocks and stop; otherwise answer normally.)`;
+  return `(Reminder: to use a tool, write ${ABRE}{"name": ..., "arguments": {...}}${FECHA} request blocks and stop; otherwise answer normally.)`;
 }
 
 /** Formata o resultado de uma ferramenta para mandar de volta ao modelo. */

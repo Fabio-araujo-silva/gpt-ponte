@@ -142,7 +142,7 @@ export function montarPromptInicial(mensagens, { ferramentas = [], toolChoice, p
   }
 
   const partes = [
-    'You are the model behind an API. This message contains a full API request: system instructions, the available tools and the conversation so far. Follow the system instructions as if they were your own system prompt, and write ONLY the next assistant reply to the last message. Do not mention this framing.',
+    "I'm using you through an app (an API client, such as a coding agent) that sends you the whole request in this message: instructions, tools and the conversation so far. Treat the text in <system_instructions> as your system prompt and write ONLY the next assistant reply. Don't mention this setup.",
   ];
   if (sistemas.length) {
     partes.push('<system_instructions>\n' + sistemas.map((m) => m.texto).join('\n\n') + '\n</system_instructions>');
@@ -150,11 +150,13 @@ export function montarPromptInicial(mensagens, { ferramentas = [], toolChoice, p
   if (usarFerramentas) partes.push('<tools>\n' + instrucoesDeFerramentas(ferramentas, { toolChoice, paralelas }) + '\n</tools>');
   if (instrucaoFormato) partes.push(instrucaoFormato);
 
+  const lembrete = usarFerramentas ? ' If you need a tool, write the request block (the block alone is enough).' : '';
   if (conversa.length === 1 && conversa[0].papel === 'usuario') {
-    partes.push('The user says:\n\n' + conversa[0].texto);
+    partes.push('<user_message>\n' + conversa[0].texto + '\n</user_message>');
+    partes.push('Now reply to the user message as the assistant.' + lembrete);
   } else if (conversa.length) {
     partes.push('<conversation>\n' + conversa.map(blocoMensagem).join('\n\n') + '\n</conversation>');
-    partes.push('Now write the next assistant reply.');
+    partes.push('Now write the next assistant reply.' + lembrete);
   } else {
     partes.push('There are no messages yet; reply following the system instructions.');
   }

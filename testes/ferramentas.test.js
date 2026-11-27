@@ -197,9 +197,9 @@ test('instruções listam as ferramentas e respeitam tool_choice', () => {
   const texto = instrucoesDeFerramentas(ferramentas, { toolChoice: 'required' });
   assert.match(texto, /### bash\nRoda um comando\.\nArguments \(JSON Schema\): \{"type":"object"/);
   assert.match(texto, /### read/);
-  assert.match(texto, /MUST call at least one tool/);
-  assert.match(instrucoesDeFerramentas(ferramentas, { toolChoice: { type: 'function', function: { name: 'read' } } }), /MUST call the tool "read"/);
-  assert.match(instrucoesDeFerramentas(ferramentas, { paralelas: false }), /at most ONE tool/);
+  assert.match(texto, /MUST write at least one request block/);
+  assert.match(instrucoesDeFerramentas(ferramentas, { toolChoice: { type: 'function', function: { name: 'read' } } }), /MUST write a request block for the tool "read"/);
+  assert.match(instrucoesDeFerramentas(ferramentas, { paralelas: false }), /at most ONE request block/);
   assert.equal(instrucoesDeFerramentas([]), '');
 });
 

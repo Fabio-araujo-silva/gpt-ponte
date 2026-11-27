@@ -164,7 +164,8 @@
         '<table><thead><tr><th>Quando</th><th>Modo</th><th>Mensagens</th><th>Resultado</th><th>Duração</th></tr></thead><tbody>' +
         pedidos
           .map((p) => {
-            const resultado = p.status === 'ok' ? (p.chamadas ? `${p.chamadas} ferramenta(s)` : `${p.caracteres} caracteres`) : p.status === 'andamento' ? 'respondendo…' : '';
+            const envios = p.envios > 1 ? ` · ${p.envios} envios${p.correcoes ? ` (${p.correcoes} correção${p.correcoes > 1 ? 'ões' : ''})` : ''}` : '';
+            const resultado = (p.status === 'ok' ? (p.chamadas ? `${p.chamadas} ferramenta(s)` : `${p.caracteres} caracteres`) : p.status === 'andamento' ? 'respondendo…' : '') + envios;
             const dur = p.duracaoMs != null ? (p.duracaoMs / 1000).toFixed(1) + ' s' : '';
             return `<tr><td>${quandoRelativo(p.quando)}</td><td>${texto(p.modo || '')}</td><td>${p.mensagens}</td>${p.status === 'erro' ? `<td class="erro">${texto(p.erro || 'erro')}</td>` : `<td>${resultado}</td>`}<td>${dur}</td></tr>`;
           })

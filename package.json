@@ -1,6 +1,6 @@
 {
   "name": "gpt-ponte",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Transforma o ChatGPT aberto no seu navegador numa API compatível com a da OpenAI (/v1/chat/completions), para usar no OpenCode e em qualquer cliente OpenAI.",
   "type": "module",
   "bin": {

@@ -362,6 +362,11 @@
       if (atual && d.id === atual.id && atual.marcador) marcadorNaoTrocado(d.id);
       return;
     }
+    if (d.tipo === 'envio-fora-de-tarefa') {
+      // Só numa aba de trabalho (ligada ao service worker): mensagem que não veio da ponte.
+      if (porta) log('aviso', 'Esta aba de trabalho mandou uma mensagem que não veio da ponte (alguém digitou nela, ou o site repetiu o envio).');
+      return;
+    }
     if (!atual || d.id !== atual.id) return;
     switch (d.tipo) {
       case 'enviado':

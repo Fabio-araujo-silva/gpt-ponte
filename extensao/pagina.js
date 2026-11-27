@@ -182,7 +182,13 @@
       return fetchOriginal.apply(this, arguments);
     }
     if (armado && Date.now() - armado.desde > VALIDADE_ARMADO_MS) armado = null;
-    if (!armado || !ehEnvioDeMensagem(url, metodo)) return fetchOriginal.apply(this, arguments);
+    if (!ehEnvioDeMensagem(url, metodo)) return fetchOriginal.apply(this, arguments);
+    if (!armado) {
+      // Envio de mensagem sem tarefa armada. Numa aba de trabalho isso é alguém digitando nela ou
+      // um envio repetido; o content script avisa a ponte (nas outras abas ninguém escuta).
+      postar({ tipo: 'envio-fora-de-tarefa' });
+      return fetchOriginal.apply(this, arguments);
+    }
     const tarefa = armado;
     const self = this;
     return (async () => {
@@ -196,7 +202,8 @@
         }
         if (!trocado) {
           // Um envio de mensagem sem o marcador: ou não é o nosso, ou o corpo veio num formato
-          // que não sabemos editar. O content script decide (ele vê se o marcador saiu na tela).
+          // que não sabemos editar. O content script decide: se a troca não acontecer logo
+          // depois (`enviado`), ele para a geração e pede para repetir digitando.
           postar({ tipo: 'envio-sem-marcador', id: tarefa.id });
           return fetchOriginal.call(self, input, init);
         }

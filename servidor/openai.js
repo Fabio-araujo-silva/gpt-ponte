@@ -183,6 +183,7 @@ export class ApiOpenAI {
       // MESMA aba (outra aba pode ter a conversa de outro pedido).
       if (e?.codigo !== 'reenviar') throw e;
       this.log.info('A extensão pediu para repetir o envio (modo digitação); repetindo na mesma aba.');
+      aoEvento({ tipo: 'etapa', etapa: 'repetindo' });
       r = await this.executor.executar(
         { prompt, nova: true, modelo, rotulo: rotuloDoPlano(plano, 'conversa nova (repetição)'), preferirAba: e.aba },
         { aoEvento, sinal, esperaMs },
@@ -213,6 +214,7 @@ export class ApiOpenAI {
       mensagens: plano.mensagens.length,
       ferramentas: plano.ferramentas.length,
       modo: plano.continuacao ? 'continuação' : 'nova',
+      envios: 0,
     });
 
     const controle = new AbortController();
@@ -401,18 +403,28 @@ export class ApiOpenAI {
       fila: (e) => `na fila: ${e.detalhe ?? 1} pedido(s) na frente`,
       despachado: () => (plano.continuacao ? 'continuando a conversa que já está aberta no ChatGPT' : 'abrindo uma conversa nova no ChatGPT'),
       'abrindo-aba': () => 'carregando a página do ChatGPT…',
-      enviado: (e) => `mensagem enviada${e.detalhe ? ` (${Math.max(1, Math.round(e.detalhe / 1000))} mil caracteres)` : ''}; esperando a resposta…`,
+      enviado: (e) => `mensagem enviada${e.detalhe ? ` (${tamanhoLegivel(e.detalhe)})` : ''}; esperando a resposta…`,
       reenviando: () => 'a conversa anterior não está mais aberta; reenviando o histórico numa conversa nova',
+      repetindo: () => 'a mensagem não passou pela troca do marcador; repetindo com o texto digitado, na mesma aba',
     };
 
+    // Quantas vezes este pedido foi ao navegador e por quais abas. Um pedido normal vai uma vez
+    // só; correções e repetições aparecem aqui (no painel, no /estado e no terminal).
+    const anotarAba = (aba) => {
+      if (!entrada || aba == null) return;
+      entrada.aba = aba;
+      entrada.abas ??= [];
+      if (!entrada.abas.includes(aba)) entrada.abas.push(aba);
+    };
     const aoEvento = (e) => {
       if (e.tipo === 'etapa') {
-        if (e.aba != null && entrada) entrada.aba = e.aba;
+        if (e.etapa === 'despachado' && entrada) entrada.envios = (entrada.envios ?? 0) + 1;
+        anotarAba(e.aba);
         const msg = etapas[e.etapa]?.(e);
         if (msg) linhaDeProgresso(msg);
         ligarRelogio();
       } else if (e.tipo === 'inicio') {
-        if (entrada) entrada.aba = e.aba;
+        anotarAba(e.aba);
         enviarCabecalho();
         linhaDeProgresso('o ChatGPT começou a responder');
       } else if (e.tipo === 'raciocinio') {
@@ -508,9 +520,11 @@ export class ApiOpenAI {
         chamadas: chamadas.length,
         duracaoMs: Date.now() - inicio,
       });
+      const abas = entrada?.abas ?? (resultado?.aba != null ? [resultado.aba] : []);
+      const envios = entrada?.envios ?? 1;
       this.log.info(
         `${resultado?.modo === 'continuação' ? '↪' : '✚'} ${nomeModelo}: ${chamadas.length ? chamadas.length + ' chamada(s) de ferramenta' : conteudo.length + ' caracteres'} em ${((Date.now() - inicio) / 1000).toFixed(1)} s` +
-          (resultado?.aba != null ? ` (aba ${resultado.aba})` : ''),
+          (abas.length ? ` (${abas.length > 1 ? 'abas' : 'aba'} ${abas.join(', ')}${envios > 1 ? `; ${envios} envios ao navegador` : ''})` : ''),
       );
     } catch (e) {
       const erro = comoErroDaPonte(e);
@@ -560,6 +574,13 @@ export function resumoDoPedido(corpo) {
 }
 
 /** Rótulo curto de uma chamada, para o monitor da extensão. */
+/** "2 caracteres", "850 caracteres", "34 mil caracteres". */
+export function tamanhoLegivel(n) {
+  if (n === 1) return '1 caractere';
+  if (n < 1000) return `${n} caracteres`;
+  return `${Math.round(n / 1000)} mil caracteres`;
+}
+
 function rotuloDoPlano(plano, modo) {
   const n = plano.ferramentas.length;
   // O OpenCode pede o título da sessão junto com a primeira mensagem (sem ferramentas).

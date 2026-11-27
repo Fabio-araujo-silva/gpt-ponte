@@ -154,6 +154,8 @@ test('extensão de verdade pelo WebSocket: inicio, deltas e fim', async () => {
   const estado = await fetch(`${p.base}/estado`).then((x) => x.json());
   assert.equal(estado.navegador.conectada, true);
   assert.equal(estado.navegador.capacidade, 2);
+  assert.equal(estado.pedidos[0].envios, 1);
+  assert.deepEqual(estado.pedidos[0].abas, [42]);
   ext.conexao.fechar();
   await p.fechar();
 });
@@ -470,6 +472,18 @@ test('repetição por "reenviar" volta para a MESMA aba (não derruba a conversa
   const tarefas = ext.recebidas.filter((m) => m.tipo === 'tarefa');
   assert.equal(tarefas.length, 2);
   assert.equal(tarefas[1].preferirAba, 7);
+  // O /estado mostra que este pedido foi duas vezes ao navegador, sempre na aba 7.
+  const estado = await fetch(`${p.base}/estado`).then((x) => x.json());
+  assert.equal(estado.pedidos[0].envios, 2);
+  assert.deepEqual(estado.pedidos[0].abas, [7]);
   ext.conexao.fechar();
   await p.fechar();
+});
+
+test('tamanho do prompt no andamento: caracteres abaixo de mil, "mil" acima', async () => {
+  const { tamanhoLegivel } = await import('../servidor/openai.js');
+  assert.equal(tamanhoLegivel(1), '1 caractere');
+  assert.equal(tamanhoLegivel(2), '2 caracteres');
+  assert.equal(tamanhoLegivel(850), '850 caracteres');
+  assert.equal(tamanhoLegivel(34_210), '34 mil caracteres');
 });

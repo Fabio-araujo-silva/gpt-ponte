@@ -239,6 +239,9 @@ function tratarMensagemDaPonte(m) {
         self.Historico.atualizar(m.id, { estado: 'erro', erro: e.message, fim: Date.now() }, 'falhou');
       });
       break;
+    case 'recarregar':
+      recarregarExtensao();
+      break;
     case 'cancelar': {
       const t = tarefas.get(m.id);
       const aba = t && abas.get(t.aba);
@@ -370,9 +373,22 @@ function avisarAbrindoAba(idTarefa) {
   self.Historico.atualizar(idTarefa, { estado: 'abrindo aba' }, 'abrindo uma conversa nova no ChatGPT');
 }
 
-async function abaParaConversaNova(modelo, idTarefa) {
+async function abaParaConversaNova(modelo, idTarefa, preferir) {
   const url = urlNovaConversa(modelo);
   const livres = [...abas.values()].filter((a) => a.estado !== 'ocupada' && !a.reservada);
+  // 0. Nova tentativa de uma tarefa: usa a mesma aba, para não derrubar a conversa de outra.
+  const preferida = preferir != null ? livres.find((a) => a.id === preferir) : null;
+  if (preferida) {
+    preferida.reservada = true;
+    avisarAbrindoAba(idTarefa);
+    try {
+      await navegar(preferida, url);
+    } catch (e) {
+      preferida.reservada = false;
+      throw e;
+    }
+    return preferida;
+  }
   // 1. Uma aba já aberta numa conversa nova, ainda sem uso.
   let aba = livres.find((a) => a.estado === 'pronta' && a.porta && a.virgem && a.urlNova === url);
   if (aba) {
@@ -415,7 +431,7 @@ async function executarTarefa(t) {
       throw erroComCodigo('conversa_indisponivel', 'A conversa não está mais aberta no navegador.');
     }
   } else {
-    aba = await abaParaConversaNova(t.modelo, t.id);
+    aba = await abaParaConversaNova(t.modelo, t.id, t.preferirAba);
   }
   aba.reservada = false;
   aba.estado = 'ocupada';
@@ -451,6 +467,23 @@ async function acordarAba(aba) {
   } finally {
     aba.acordando = false;
   }
+}
+
+/**
+ * Recarrega a extensão (pega o código novo da pasta). Fecha antes as abas de trabalho: os
+ * scripts delas ficariam órfãos, e a extensão abre abas novas no próximo pedido.
+ */
+async function recarregarExtensao() {
+  logPonte('info', 'Recarregando a extensão a pedido da ponte (as abas de trabalho serão reabertas no próximo pedido).');
+  for (const id of [...abas.keys()]) {
+    try {
+      await chrome.tabs.remove(id);
+    } catch (_) {
+      /* já fechada */
+    }
+  }
+  await chrome.storage.session.remove('abasTrabalho').catch(() => {});
+  setTimeout(() => chrome.runtime.reload(), 300);
 }
 
 function liberarAba(aba, idTarefa) {
@@ -551,7 +584,7 @@ function tratarMensagemDaAba(aba, porta, m) {
     case 'erro':
       // O modo marcador falhou nesta página: daqui em diante a aba digita o texto inteiro.
       if (m.modoEnvio) aba.modoEnvio = m.modoEnvio;
-      enviarWs({ tipo: 'erro', id: m.id, codigo: m.codigo, mensagem: m.mensagem });
+      enviarWs({ tipo: 'erro', id: m.id, codigo: m.codigo, mensagem: m.mensagem, aba: aba.id });
       self.Historico.atualizar(
         m.id,
         { estado: m.codigo === 'cancelado' ? 'cancelada' : 'erro', erro: m.mensagem, fim: Date.now() },

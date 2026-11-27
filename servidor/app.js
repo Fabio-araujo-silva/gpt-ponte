@@ -147,6 +147,16 @@ export function criarPonte(config, { log = logMudo, executor } = {}) {
       return;
     }
 
+    if (req.method === 'POST' && rota === '/extensao/recarregar') {
+      if (!autorizado(req)) {
+        enviarJson(res, 401, new ErroDaPonte('nao_autorizado').paraOpenAI());
+        return;
+      }
+      const ok = gerente.recarregarExtensao();
+      enviarJson(res, ok ? 200 : 503, ok ? { ok: true } : new ErroDaPonte('sem_extensao').paraOpenAI());
+      return;
+    }
+
     const caminhoApi = rota.replace(/^\/v1(?=\/)/, '');
     const ehApi = ['/models', '/chat/completions'].includes(caminhoApi) || caminhoApi.startsWith('/models/');
     if (!ehApi) {

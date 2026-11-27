@@ -21,6 +21,7 @@ Uso:
   node servidor/index.js opencode --perfil     cria o perfil "só ChatGPT" (usado pelo opencode-chatgpt)
   node servidor/index.js teste ["pergunta"]    testa a ponte que já está rodando
   node servidor/index.js saude [--esperar <s>] diz se a ponte está no ar (e espera até <s> segundos)
+  node servidor/index.js recarregar-extensao   recarrega a extensão (depois de atualizar os arquivos)
 ${ajudaOpcoes()}`;
 
 function enderecoBase(cfg) {
@@ -108,6 +109,21 @@ function comandoOpenCode(cfg, opcoes) {
   console.log(`Arquivo: ${arquivoDoOpenCode()}\n`);
   console.log(JSON.stringify({ [raiz]: { [ID_PROVEDOR]: bloco } }, null, 2));
   console.log(`\nPara gravar automaticamente (com backup): node servidor/index.js opencode --instalar`);
+}
+
+/** Pede à extensão conectada que se recarregue (depois de atualizar os arquivos dela). */
+async function comandoRecarregarExtensao(cfg) {
+  const base = enderecoBase(cfg);
+  const r = await fetch(`${base}/extensao/recarregar`, { method: 'POST', headers: { Authorization: `Bearer ${cfg.chave || 'x'}` } }).catch(() => null);
+  if (!r) {
+    console.error(`A ponte não está rodando em ${base}.`);
+    process.exit(1);
+  }
+  if (!r.ok) {
+    console.error('A extensão não está conectada (ou a versão dela é anterior a 0.2.1: recarregue em chrome://extensions).');
+    process.exit(1);
+  }
+  console.log('Pedido enviado: a extensão fecha as abas de trabalho e se recarrega em instantes.');
 }
 
 /** Diz se a ponte está no ar (código de saída 0) e se a extensão está conectada. */
@@ -199,6 +215,7 @@ async function main() {
   if (comando === 'opencode') return comandoOpenCode(cfg, opcoes);
   if (comando === 'teste') return comandoTeste(cfg, posicionais.slice(1).join(' '));
   if (comando === 'saude') return comandoSaude(cfg, opcoes);
+  if (comando === 'recarregar-extensao') return comandoRecarregarExtensao(cfg);
   console.error(`Comando desconhecido: ${comando}\n\n${AJUDA}`);
   process.exit(1);
 }

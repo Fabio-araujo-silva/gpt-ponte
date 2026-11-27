@@ -162,6 +162,7 @@ export class GerenteDaExtensao extends EventEmitter {
         continuar: tarefa.continuar ?? null,
         modelo: tarefa.modelo ?? null,
         rotulo: tarefa.rotulo ?? null,
+        preferirAba: tarefa.preferirAba ?? null,
       });
       if (!enviado) {
         acabar();
@@ -170,6 +171,11 @@ export class GerenteDaExtensao extends EventEmitter {
         aoEvento({ tipo: 'etapa', etapa: 'despachado' });
       }
     });
+  }
+
+  /** Pede à extensão que se recarregue (pega o código novo da pasta). */
+  recarregarExtensao() {
+    return !!this.conexao?.enviar({ tipo: 'recarregar' });
   }
 
   cancelarTudo() {
@@ -289,7 +295,7 @@ export class GerenteDaExtensao extends EventEmitter {
         return;
       case 'erro':
         registro.acabar();
-        registro.reject(new ErroDaPonte(m.codigo || 'chatgpt', m.mensagem || undefined, { detalhe: m.detalhe }));
+        registro.reject(new ErroDaPonte(m.codigo || 'chatgpt', m.mensagem || undefined, { detalhe: m.detalhe, aba: m.aba }));
         return;
       default:
         return;

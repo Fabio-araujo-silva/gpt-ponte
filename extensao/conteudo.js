@@ -318,34 +318,28 @@
         }
       }, 20000);
       await apertarEnviar(campo);
-      if (porMarcador) vigiarMarcador(tarefa.id, marcador);
     } catch (e) {
       falhar(e.codigo || 'chatgpt', e.message || String(e));
     }
   }
 
   /**
-   * Plano B do modo marcador: se a mensagem saiu sem passar pela troca (o marcador aparece
-   * na conversa e o script da página não avisou "enviado"), para a geração e pede para a
-   * tarefa ser repetida com o texto digitado, numa conversa nova.
+   * Plano B do modo marcador. Só age com prova: o script da página viu o pedido de envio
+   * desta tarefa sair SEM o marcador no corpo (formato que ele não soube editar). Aí para a
+   * geração e pede para a tarefa ser repetida com o texto digitado, na mesma aba.
+   *
+   * (Ver o marcador na tela não prova nada: o site logado mostra o balão da mensagem antes
+   * de o pedido sair. Usar isso como sinal duplicava os pedidos.)
    */
-  async function vigiarMarcador(id, marcador) {
-    const contar = (texto) => (texto || '').split(marcador).length - 1;
-    let saiuSemTroca = false;
-    for (let i = 0; i < 16 && !saiuSemTroca; i++) {
-      await dormir(500);
+  function marcadorNaoTrocado(id) {
+    setTimeout(() => {
       if (!atual || atual.id !== id || atual.enviado) return;
-      // O marcador apareceu na página fora do campo de mensagem = foi enviado como está.
-      const campo = acharCampo();
-      const noCampo = campo && campo.tagName !== 'TEXTAREA' ? contar(campo.innerText) : 0;
-      saiuSemTroca = contar(document.body && document.body.innerText) > noCampo;
-    }
-    if (!saiuSemTroca || !atual || atual.id !== id || atual.enviado) return;
-    log('aviso', 'A mensagem saiu sem passar pela extensão; repetindo com o texto digitado.');
-    postarPagina({ tipo: 'desarmar', id });
-    const parar = acharBotaoParar();
-    if (parar) parar.click();
-    terminar('erro', { codigo: 'reenviar', mensagem: 'O envio não passou pela extensão.', modoEnvio: 'digitar' });
+      log('aviso', 'O pedido de envio saiu sem o marcador (formato que a extensão não sabe editar); repetindo com o texto digitado.');
+      postarPagina({ tipo: 'desarmar', id });
+      const parar = acharBotaoParar();
+      if (parar) parar.click();
+      terminar('erro', { codigo: 'reenviar', mensagem: 'O envio não passou pela troca do marcador.', modoEnvio: 'digitar' });
+    }, 1500);
   }
 
   function cancelar(id) {
@@ -365,7 +359,7 @@
       return;
     }
     if (d.tipo === 'envio-sem-marcador') {
-      log('debug', 'Um envio de mensagem passou sem o marcador.');
+      if (atual && d.id === atual.id && atual.marcador) marcadorNaoTrocado(d.id);
       return;
     }
     if (!atual || d.id !== atual.id) return;

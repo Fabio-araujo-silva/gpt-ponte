@@ -31,6 +31,7 @@ export class ErroDaPonte extends Error {
     this.tipo = base.tipo;
     this.codigoOpenAI = base.codigo ?? this.codigo;
     this.detalhe = extra.detalhe;
+    this.aba = extra.aba ?? null; // aba do navegador onde o erro aconteceu (se houver)
   }
 
   /** Corpo de erro no formato da OpenAI. */

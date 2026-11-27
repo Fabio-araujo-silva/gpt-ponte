@@ -158,6 +158,7 @@ export class ApiOpenAI {
   async executar(plano, aoEvento, sinal) {
     const modelo = plano.modelo === MODELO_PADRAO ? null : plano.modelo;
     const esperaMs = this.config.esperaExtensaoMs ?? 30e3;
+    let abaPreferida = null;
     if (plano.continuacao) {
       this.memoria.consumir(plano.continuacao.chave);
       try {
@@ -170,17 +171,22 @@ export class ApiOpenAI {
         if (e?.codigo !== 'conversa_indisponivel' && e?.codigo !== 'reenviar') throw e;
         this.log.info('A conversa não está mais aberta no navegador; reenviando o histórico numa conversa nova.');
         aoEvento({ tipo: 'etapa', etapa: 'reenviando' });
+        abaPreferida = e.aba ?? plano.continuacao.info.aba;
       }
     }
     const prompt = montarPromptInicial(plano.mensagens, plano.opcoesPrompt);
     let r;
     try {
-      r = await this.executor.executar({ prompt, nova: true, modelo, rotulo: rotuloDoPlano(plano, 'conversa nova') }, { aoEvento, sinal, esperaMs });
+      r = await this.executor.executar({ prompt, nova: true, modelo, rotulo: rotuloDoPlano(plano, 'conversa nova'), preferirAba: abaPreferida }, { aoEvento, sinal, esperaMs });
     } catch (e) {
-      // A extensão percebeu que a mensagem saiu errada antes de qualquer resposta: repete uma vez.
+      // A extensão provou que a mensagem saiu sem a troca do marcador: repete uma vez, na
+      // MESMA aba (outra aba pode ter a conversa de outro pedido).
       if (e?.codigo !== 'reenviar') throw e;
-      this.log.info('A extensão pediu para repetir o envio (modo digitação); repetindo numa conversa nova.');
-      r = await this.executor.executar({ prompt, nova: true, modelo, rotulo: rotuloDoPlano(plano, 'conversa nova') }, { aoEvento, sinal, esperaMs });
+      this.log.info('A extensão pediu para repetir o envio (modo digitação); repetindo na mesma aba.');
+      r = await this.executor.executar(
+        { prompt, nova: true, modelo, rotulo: rotuloDoPlano(plano, 'conversa nova (repetição)'), preferirAba: e.aba },
+        { aoEvento, sinal, esperaMs },
+      );
     }
     return { ...r, modo: 'nova', tamanhoPrompt: prompt.length };
   }
@@ -556,6 +562,9 @@ export function resumoDoPedido(corpo) {
 /** Rótulo curto de uma chamada, para o monitor da extensão. */
 function rotuloDoPlano(plano, modo) {
   const n = plano.ferramentas.length;
+  // O OpenCode pede o título da sessão junto com a primeira mensagem (sem ferramentas).
+  const sistema = plano.mensagens.filter((m) => m.papel === 'sistema').map((m) => m.texto).join(' ');
+  if (!n && /\btitle\b|t[íi]tulo/i.test(sistema)) return `título da sessão · ${modo}`;
   return `${modo} · ${plano.mensagens.length} mensagens${n ? ` · ${n} ferramentas` : ''}`;
 }
 

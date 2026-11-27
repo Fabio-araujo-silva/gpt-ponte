@@ -452,3 +452,24 @@ test('andamento: o stream mostra as etapas no reasoning_content antes do texto',
   await p.fechar();
   await p2.fechar();
 });
+
+test('repetição por "reenviar" volta para a MESMA aba (não derruba a conversa de outra)', async () => {
+  const p = await iniciarPonte();
+  let n = 0;
+  const ext = await extensaoFalsa(p.ws, async (m, c) => {
+    n++;
+    if (n === 1) {
+      c.enviar({ tipo: 'erro', id: m.id, codigo: 'reenviar', mensagem: 'sem troca', aba: 7 });
+      return;
+    }
+    c.enviar({ tipo: 'inicio', id: m.id, aba: 7, conversaId: 'cx' });
+    c.enviar({ tipo: 'fim', id: m.id, texto: 'ok', aba: 7, conversaId: 'cx' });
+  });
+  const c = await (await pedir(p.base, { messages: [{ role: 'user', content: 'oi' }] })).json();
+  assert.equal(c.choices[0].message.content, 'ok');
+  const tarefas = ext.recebidas.filter((m) => m.tipo === 'tarefa');
+  assert.equal(tarefas.length, 2);
+  assert.equal(tarefas[1].preferirAba, 7);
+  ext.conexao.fechar();
+  await p.fechar();
+});

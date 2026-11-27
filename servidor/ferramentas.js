@@ -96,9 +96,14 @@ function descreverEscolha(toolChoice) {
   return '';
 }
 
-/** Lembrete curto que vai junto de cada continuação da conversa. */
-export function lembreteDeFerramentas() {
-  return `(Reminder: to use a tool, write ${ABRE}{"name": ..., "arguments": {...}}${FECHA} request blocks and stop; otherwise answer normally.)`;
+/**
+ * Lembrete curto que vai junto de cada continuação da conversa. Em conversas longas o ChatGPT
+ * pode esquecer o começo; o lembrete repete o essencial (formato e nomes das ferramentas).
+ */
+export function lembreteDeFerramentas(nomes = []) {
+  const lista = nomes.length > 30 ? `${nomes.slice(0, 30).join(', ')}, …` : nomes.join(', ');
+  const ferramentas = lista ? ` (${lista})` : '';
+  return `(Reminder: you work through the app's tools${ferramentas}. To use one, write ${ABRE}{"name": ..., "arguments": {...}}${FECHA} and stop; when the task is done, answer normally.)`;
 }
 
 /** Formata o resultado de uma ferramenta para mandar de volta ao modelo. */
@@ -139,7 +144,20 @@ export function interpretarChamada(corpo, nomesValidos = []) {
     argumentos = lido && typeof lido === 'object' ? lido : { input: argumentos };
   }
   if (!argumentos || typeof argumentos !== 'object' || Array.isArray(argumentos)) argumentos = {};
-  return { nome: corrigirNome(nome, nomesValidos), argumentos };
+  const nomeFinal = corrigirNome(nome, nomesValidos);
+  const chamada = { nome: nomeFinal, argumentos };
+  if (nomesValidos.length && !nomesValidos.includes(nomeFinal)) chamada.desconhecida = true;
+  return chamada;
+}
+
+/** Por que um bloco não virou chamada (para pedir a correção ao modelo). */
+export function motivoDoBlocoInvalido(corpo, nomesValidos = []) {
+  const chamada = interpretarChamada(corpo, nomesValidos);
+  if (chamada?.desconhecida) {
+    return `there is no tool named "${chamada.nome}". Available tools: ${nomesValidos.join(', ')}.`;
+  }
+  if (!tentarJson(corpo)) return 'the content between the tags is not valid JSON.';
+  return 'the JSON must be an object like {"name": "<tool name>", "arguments": {...}}.';
 }
 
 function pegarTexto(v) {
@@ -173,8 +191,10 @@ function abreCerca(texto) {
 
 /**
  * Lê o texto do modelo aos pedaços e devolve eventos:
- *   {tipo: 'texto', texto}  e  {tipo: 'chamada', id, nome, argumentos}
- * `argumentos` já vem como string JSON, como a OpenAI manda.
+ *   {tipo: 'texto', texto}
+ *   {tipo: 'chamada', id, nome, argumentos}   (`argumentos` já em string JSON, como a OpenAI)
+ *   {tipo: 'invalido', bruto, motivo}         (bloco que não deu para entender: quem chama
+ *                                              decide se pede correção ou mostra como texto)
  */
 export class LeitorDeFerramentas {
   constructor({ nomes = [], gerarId = novoIdChamada } = {}) {
@@ -205,8 +225,8 @@ export class LeitorDeFerramentas {
     if (this.estado === 'dentro') {
       // Bloco sem </tool_call>: aproveita se o JSON estiver completo.
       const chamada = interpretarChamada(this.buf, this.nomes);
-      if (chamada) this._emitirChamada(eventos, chamada);
-      else this._emitirTexto(eventos, ABRE + this.buf);
+      if (chamada && !chamada.desconhecida) this._emitirChamada(eventos, chamada);
+      else this._emitirInvalido(eventos, this.buf, chamada ? undefined : 'the block was not closed with </tool_call> and its JSON is incomplete.');
       this.buf = '';
       this.estado = 'fora';
     } else if (this.buf) {
@@ -261,9 +281,13 @@ export class LeitorDeFerramentas {
       this.buf = this.buf.slice(j + FECHA.length);
       this.estado = 'fora';
       const chamada = interpretarChamada(corpo, this.nomes);
-      if (chamada) this._emitirChamada(eventos, chamada);
-      else this._emitirTexto(eventos, ABRE + corpo + FECHA);
+      if (chamada && !chamada.desconhecida) this._emitirChamada(eventos, chamada);
+      else this._emitirInvalido(eventos, corpo);
     }
+  }
+
+  _emitirInvalido(eventos, corpo, motivo) {
+    eventos.push({ tipo: 'invalido', bruto: corpo, motivo: motivo ?? motivoDoBlocoInvalido(corpo, this.nomes) });
   }
 
   /** Quantos caracteres do fim do buffer ainda podem virar parte de uma tag ou cerca. */
@@ -312,7 +336,13 @@ export class LeitorDeFerramentas {
 export function separarChamadas(texto, nomes = []) {
   const leitor = new LeitorDeFerramentas({ nomes });
   const eventos = [...leitor.receber(texto), ...leitor.terminar()];
-  const conteudo = eventos.filter((e) => e.tipo === 'texto').map((e) => e.texto).join('');
+  const conteudo = eventos.map((e) => (e.tipo === 'texto' ? e.texto : e.tipo === 'invalido' ? blocoComoTexto(e) : '')).join('');
   const chamadas = eventos.filter((e) => e.tipo === 'chamada');
-  return { conteudo, chamadas };
+  const invalidos = eventos.filter((e) => e.tipo === 'invalido');
+  return { conteudo, chamadas, invalidos };
+}
+
+/** Um bloco inválido de volta ao texto original (quando não deu para corrigir). */
+export function blocoComoTexto(evento) {
+  return ABRE + evento.bruto + FECHA;
 }

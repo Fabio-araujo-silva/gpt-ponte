@@ -53,6 +53,18 @@ export class Simulador {
     conversa.turnos++;
     conversa.ocupada = true;
     try {
+      aoEvento({ tipo: 'etapa', etapa: 'despachado', aba });
+      aoEvento({ tipo: 'etapa', etapa: 'enviado', aba, detalhe: tarefa.prompt.length });
+      // "/pensar N" na mensagem simula um modelo que pensa N segundos antes de escrever.
+      const pensar = /\/pensar\s+(\d+)/.exec(tarefa.prompt.replace(/<tools>[\s\S]*?<\/tools>/, ''));
+      if (pensar) {
+        const fim = Date.now() + Number(pensar[1]) * 1000;
+        while (Date.now() < fim) {
+          if (sinal?.aborted) throw new ErroDaPonte('cancelado');
+          await new Promise((r) => setTimeout(r, 200));
+        }
+        aoEvento({ tipo: 'raciocinio', texto: 'Pensei com calma sobre o pedido. ' });
+      }
       aoEvento({ tipo: 'inicio', aba, conversaId: conversa.id });
       const resposta = this.responder(tarefa.prompt, conversa);
       const pedacos = resposta.match(/[\s\S]{1,7}/g) ?? [];

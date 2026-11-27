@@ -11,9 +11,50 @@ import {
   estimarTokens,
   contextoDoPedido,
 } from './prompt.js';
-import { lerFerramentas, LeitorDeFerramentas } from './ferramentas.js';
+import { lerFerramentas, LeitorDeFerramentas, blocoComoTexto, ABRE, FECHA } from './ferramentas.js';
 
 export const MODELO_PADRAO = 'chatgpt';
+
+// Frases de "não tenho acesso" (pt e en). Só valem no começo de uma resposta sem blocos.
+const RECUSAS = [
+  /n[ãa]o tenho (acesso|como acessar|permiss[ãa]o para acessar)/i,
+  /n[ãa]o (consigo|posso|sou capaz de) (acessar|executar comandos|rodar comandos|ver (os |seus )?arquivos|ler (os |seus )?arquivos|mexer no seu|navegar n)/i,
+  /sem acesso (direto )?(ao|aos|à|às) (seu|sua|seus|suas)/i,
+  /\bI (do not|don't|can't|cannot) (have )?(direct |any )?access\b/i,
+  /\bI(?:'m| am) (unable|not able) to (access|run|execute|read|see|browse)\b/i,
+  /\bI (can't|cannot) (run|execute) (commands|code|anything|programs)\b/i,
+];
+
+/** O começo da resposta é o modelo dizendo que não tem acesso ao computador? */
+export function pareceRecusa(texto) {
+  if (!texto || texto.length > 1500 || texto.includes(ABRE)) return false;
+  return RECUSAS.some((r) => r.test(texto));
+}
+
+/** Pede ao modelo que reescreva os blocos que não deram para usar. */
+export function mensagemDeCorrecao(invalidos) {
+  const itens = invalidos
+    .slice(0, 5)
+    .map((inv) => `- ${inv.motivo}\n  Block: ${inv.bruto.trim().slice(0, 300)}${inv.bruto.trim().length > 300 ? '…' : ''}`)
+    .join('\n');
+  return [
+    'The app could not use the request block(s) in your last reply:',
+    itens,
+    '',
+    `Please write the request block(s) again, correctly: valid JSON between ${ABRE} and ${FECHA}, with "name" set to one of the available tools. Write only the corrected block(s).`,
+  ].join('\n');
+}
+
+/** Lembra o modelo de que as ferramentas funcionam de verdade. */
+export function mensagemContraRecusa(nomes) {
+  return [
+    'You do have access here: this app runs your request blocks on my computer and sends the results back to you. Please continue the task now by writing the request block(s) you need, for example:',
+    ABRE,
+    `{"name": "${nomes[0] ?? '<tool name>'}", "arguments": {...}}`,
+    FECHA,
+    `Available tools: ${nomes.join(', ')}.`,
+  ].join('\n');
+}
 
 function novoId(prefixo) {
   return prefixo + randomBytes(12).toString('hex');
@@ -128,6 +169,7 @@ export class ApiOpenAI {
       } catch (e) {
         if (e?.codigo !== 'conversa_indisponivel' && e?.codigo !== 'reenviar') throw e;
         this.log.info('A conversa não está mais aberta no navegador; reenviando o histórico numa conversa nova.');
+        aoEvento({ tipo: 'etapa', etapa: 'reenviando' });
       }
     }
     const prompt = montarPromptInicial(plano.mensagens, plano.opcoesPrompt);
@@ -172,7 +214,7 @@ export class ApiOpenAI {
     sinalDoCliente?.addEventListener('abort', aoAbortarCliente, { once: true });
 
     const usaFerramentas = plano.ferramentas.length > 0 && corpo.tool_choice !== 'none';
-    const leitor = usaFerramentas ? new LeitorDeFerramentas({ nomes: plano.ferramentas.map((f) => f.nome) }) : null;
+    const nomesDasFerramentas = plano.ferramentas.map((f) => f.nome);
     const cortador = new CortadorDeParada(corpo.stop);
     let conteudo = '';
     let raciocinio = '';
@@ -180,6 +222,22 @@ export class ApiOpenAI {
     let cabecalhoEnviado = false;
     let papelEnviado = false;
     let manterViva = null;
+
+    // Cada "rodada" é uma resposta do ChatGPT. Normalmente há uma só; a ponte faz outra na
+    // mesma conversa quando precisa pedir uma correção (bloco inválido, recusa, resposta vazia).
+    // Recusa só é vigiada quando o pedido termina com mensagem do usuário: depois de um
+    // resultado de ferramenta, "não consigo abrir o arquivo" pode ser uma resposta legítima.
+    const vigiarRecusa = usaFerramentas && plano.mensagens.at(-1)?.papel === 'usuario';
+    const novaRodada = () => ({
+      leitor: usaFerramentas ? new LeitorDeFerramentas({ nomes: nomesDasFerramentas }) : null,
+      recebido: '',
+      guarda: vigiarRecusa ? '' : null, // começo da resposta, segurado até saber se é recusa
+      descartado: '',
+      recusou: false,
+      invalidos: [],
+      emitiu: 0,
+    });
+    let rodada = novaRodada();
 
     const escrever = (obj) => {
       if (!res.writableEnded) res.write(`data: ${JSON.stringify(obj)}\n\n`);
@@ -208,38 +266,154 @@ export class ApiOpenAI {
     const emitir = (eventos) => {
       for (const e of eventos) {
         if (e.tipo === 'texto') {
+          if (!e.texto) continue;
           conteudo += e.texto;
-          if (stream && e.texto) {
+          rodada.emitiu++;
+          comecouTexto = true;
+          if (stream) {
             enviarCabecalho();
             pedaco({ content: e.texto });
           }
         } else if (e.tipo === 'chamada') {
           const indice = chamadas.length;
           chamadas.push(e);
+          rodada.emitiu++;
+          comecouTexto = true;
           if (stream) {
             enviarCabecalho();
             pedaco({ tool_calls: [{ index: indice, id: e.id, type: 'function', function: { name: e.nome, arguments: e.argumentos } }] });
           }
+        } else if (e.tipo === 'invalido') {
+          rodada.invalidos.push(e); // a ponte pede a correção antes de mostrar qualquer coisa
         }
       }
     };
-    let recebido = ''; // texto bruto que chegou da extensão até agora
-    const receberTexto = (texto) => {
-      recebido += texto;
+    const passarAdiante = (texto) => {
       const seguro = cortador.receber(texto);
-      if (seguro) emitir(leitor ? leitor.receber(seguro) : [{ tipo: 'texto', texto: seguro }]);
+      if (seguro) emitir(rodada.leitor ? rodada.leitor.receber(seguro) : [{ tipo: 'texto', texto: seguro }]);
       if (cortador.parou) controle.abort();
+    };
+    const receberTexto = (texto) => {
+      rodada.recebido += texto;
+      if (rodada.recusou) {
+        rodada.descartado += texto;
+        return;
+      }
+      if (rodada.guarda === null) return passarAdiante(texto);
+      // Segura o começo: se for "não tenho acesso ao seu computador", nem chega ao cliente.
+      rodada.guarda += texto;
+      const g = rodada.guarda;
+      if (g.includes('<tool_call>') || g.length >= 400) {
+        rodada.guarda = null;
+        if (pareceRecusa(g)) {
+          rodada.recusou = true;
+          rodada.descartado = g;
+        } else passarAdiante(g);
+      }
+    };
+    /** Fim de uma rodada: completa pelo texto final e esvazia o que estava guardado. */
+    const fecharRodada = (resultado) => {
+      const final = resultado?.texto ?? '';
+      if (final && !cortador.parou) {
+        if (final.startsWith(rodada.recebido)) {
+          if (final.length > rodada.recebido.length) receberTexto(final.slice(rodada.recebido.length));
+        } else {
+          this.log.debug(`O texto final difere do que veio em pedaços (${rodada.recebido.length} → ${final.length} caracteres).`);
+        }
+      }
+      if (rodada.guarda !== null) {
+        const g = rodada.guarda;
+        rodada.guarda = null;
+        if (pareceRecusa(g)) {
+          rodada.recusou = true;
+          rodada.descartado = g;
+        } else passarAdiante(g);
+      }
+      if (!rodada.recusou) {
+        const resto = cortador.terminar();
+        if (resto) emitir(rodada.leitor ? rodada.leitor.receber(resto) : [{ tipo: 'texto', texto: resto }]);
+        if (rodada.leitor) emitir(rodada.leitor.terminar());
+      }
+    };
+    /** O que fazer depois da rodada: nada, ou a mensagem de correção a mandar na mesma conversa. */
+    const correcoes = { bloco: 0, recusa: 0, vazio: 0 };
+    const proximaCorrecao = () => {
+      if (cortador.parou) return null;
+      if (rodada.invalidos.length && correcoes.bloco < 2) {
+        correcoes.bloco++;
+        return {
+          aviso: `o bloco de ferramenta veio com erro (${rodada.invalidos[0].motivo}); pedindo a correção ao ChatGPT…`,
+          prompt: mensagemDeCorrecao(rodada.invalidos),
+        };
+      }
+      if (rodada.recusou && correcoes.recusa < 1) {
+        correcoes.recusa++;
+        return { aviso: 'o ChatGPT disse que não tinha acesso; lembrando que as ferramentas funcionam…', prompt: mensagemContraRecusa(nomesDasFerramentas) };
+      }
+      if (!rodada.emitiu && !rodada.invalidos.length && !rodada.recusou && !chamadas.length && !conteudo.trim() && correcoes.vazio < 1) {
+        correcoes.vazio++;
+        return {
+          aviso: 'a resposta veio vazia; pedindo de novo…',
+          prompt:
+            'Your last reply arrived empty here (it may have gone to a canvas or to one of your own tools, which this app cannot see). Please write your answer, or your request block(s), directly in the chat.',
+        };
+      }
+      return null;
+    };
+    /** Sem mais correções possíveis: o que sobrou vira texto, para o cliente ver o que aconteceu. */
+    const entregarSobras = () => {
+      if (rodada.recusou && rodada.descartado) emitir([{ tipo: 'texto', texto: rodada.descartado }]);
+      for (const inv of rodada.invalidos) emitir([{ tipo: 'texto', texto: (conteudo ? '\n' : '') + blocoComoTexto(inv) }]);
+      rodada.invalidos = [];
+    };
+
+    // Andamento no bloco de "pensando" do cliente (reasoning_content), até o texto começar:
+    // assim quem usa o OpenCode vê que o pedido está andando, como numa API de verdade.
+    const mostrarProgresso = stream && this.config.progresso !== false;
+    let comecouTexto = false;
+    let escreveuProgresso = false;
+    let ultimaLinhaEm = 0;
+    let relogio = null;
+    const linhaDeProgresso = (msg, sempre = false) => {
+      if (!mostrarProgresso || (comecouTexto && !sempre)) return;
+      enviarCabecalho();
+      pedaco({ reasoning_content: `[GPT Ponte] ${msg}\n` });
+      escreveuProgresso = true;
+      ultimaLinhaEm = Date.now();
+    };
+    const ligarRelogio = () => {
+      if (!mostrarProgresso || relogio) return;
+      relogio = setInterval(() => {
+        if (comecouTexto || Date.now() - ultimaLinhaEm < 9500) return;
+        linhaDeProgresso(`esperando o ChatGPT… ${Math.round((Date.now() - inicio) / 1000)} s`);
+      }, 10e3);
+      relogio.unref?.();
+    };
+    const etapas = {
+      fila: (e) => `na fila: ${e.detalhe ?? 1} pedido(s) na frente`,
+      despachado: () => (plano.continuacao ? 'continuando a conversa que já está aberta no ChatGPT' : 'abrindo uma conversa nova no ChatGPT'),
+      'abrindo-aba': () => 'carregando a página do ChatGPT…',
+      enviado: (e) => `mensagem enviada${e.detalhe ? ` (${Math.max(1, Math.round(e.detalhe / 1000))} mil caracteres)` : ''}; esperando a resposta…`,
+      reenviando: () => 'a conversa anterior não está mais aberta; reenviando o histórico numa conversa nova',
     };
 
     const aoEvento = (e) => {
-      if (e.tipo === 'inicio') {
+      if (e.tipo === 'etapa') {
+        if (e.aba != null && entrada) entrada.aba = e.aba;
+        const msg = etapas[e.etapa]?.(e);
+        if (msg) linhaDeProgresso(msg);
+        ligarRelogio();
+      } else if (e.tipo === 'inicio') {
         if (entrada) entrada.aba = e.aba;
         enviarCabecalho();
+        linhaDeProgresso('o ChatGPT começou a responder');
       } else if (e.tipo === 'raciocinio') {
         raciocinio += e.texto;
         if (stream) {
           enviarCabecalho();
-          pedaco({ reasoning_content: e.texto });
+          // Separa as linhas da ponte do raciocínio de verdade do modelo.
+          pedaco({ reasoning_content: (escreveuProgresso && raciocinio === e.texto ? '\n' : '') + e.texto });
+          ultimaLinhaEm = Date.now();
         }
       } else if (e.tipo === 'texto') {
         receberTexto(e.texto);
@@ -253,19 +427,31 @@ export class ApiOpenAI {
       } catch (e) {
         if (!(cortador.parou && e?.codigo === 'cancelado')) throw e;
       }
-      // O texto final da extensão vale mais que a soma dos pedaços: completa o que faltou.
-      const final = resultado?.texto ?? '';
-      if (final && !cortador.parou) {
-        if (final.startsWith(recebido)) {
-          if (final.length > recebido.length) receberTexto(final.slice(recebido.length));
-        } else {
-          this.log.debug(`O texto final difere do que veio em pedaços (${recebido.length} → ${final.length} caracteres).`);
+      fecharRodada(resultado);
+
+      // Correções na mesma conversa (bloco inválido, recusa, resposta vazia), sem o cliente perceber.
+      for (let correcao = proximaCorrecao(); correcao && resultado?.aba != null; correcao = proximaCorrecao()) {
+        this.log.info(`Correção automática: ${correcao.aviso}`);
+        linhaDeProgresso(correcao.aviso, true);
+        const anterior = resultado;
+        rodada = novaRodada();
+        rodada.guarda = null; // numa rodada de correção, o que vier vai para o cliente
+        try {
+          resultado = await this.executor.executar(
+            { prompt: correcao.prompt, nova: false, continuar: { aba: anterior.aba, conversaId: anterior.conversaId }, modelo: plano.modelo === MODELO_PADRAO ? null : plano.modelo },
+            { aoEvento, sinal: controle.signal, esperaMs: this.config.esperaExtensaoMs ?? 30e3 },
+          );
+        } catch (e) {
+          if (e?.codigo === 'cancelado' || e?.codigo === 'extensao_desconectada') throw e;
+          this.log.aviso(`A correção automática falhou (${e?.message}); entregando o que já havia.`);
+          resultado = anterior;
+          break;
         }
+        resultado = { ...resultado, modo: anterior.modo, tamanhoPrompt: anterior.tamanhoPrompt };
+        fecharRodada(resultado);
+        if (entrada) entrada.correcoes = (entrada.correcoes ?? 0) + 1;
       }
-      // Fecha o streaming: o que estava guardado no cortador e no leitor.
-      const resto = cortador.terminar();
-      if (resto) emitir(leitor ? leitor.receber(resto) : [{ tipo: 'texto', texto: resto }]);
-      if (leitor) emitir(leitor.terminar());
+      entregarSobras();
 
       if (!conteudo.trim() && !chamadas.length) throw new ErroDaPonte('sem_resposta');
 
@@ -328,6 +514,7 @@ export class ApiOpenAI {
       }
     } finally {
       clearInterval(manterViva);
+      clearInterval(relogio);
       sinalDoCliente?.removeEventListener('abort', aoAbortarCliente);
     }
   }

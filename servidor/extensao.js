@@ -113,6 +113,7 @@ export class GerenteDaExtensao extends EventEmitter {
   async executar(tarefa, { aoEvento = () => {}, sinal, esperaMs = 30e3 } = {}) {
     if (sinal?.aborted) throw new ErroDaPonte('cancelado');
     await this.esperarConexao(esperaMs);
+    if (this.vagasEmUso >= this.capacidade || this.fila.length) aoEvento({ tipo: 'etapa', etapa: 'fila', detalhe: this.fila.length + 1 });
     await this._esperarVez(sinal);
     const id = randomUUID();
     return new Promise((resolve, reject) => {
@@ -164,6 +165,8 @@ export class GerenteDaExtensao extends EventEmitter {
       if (!enviado) {
         acabar();
         reject(new ErroDaPonte('sem_extensao'));
+      } else {
+        aoEvento({ tipo: 'etapa', etapa: 'despachado' });
       }
     });
   }
@@ -261,6 +264,10 @@ export class GerenteDaExtensao extends EventEmitter {
     if (!registro) return; // tarefa já encerrada (cancelada, tempo esgotado)
     registro.ultimoEvento = Date.now();
     switch (m.tipo) {
+      case 'etapa':
+        if (m.aba != null) registro.aba = m.aba;
+        registro.aoEvento({ tipo: 'etapa', etapa: m.etapa, detalhe: m.detalhe, aba: m.aba });
+        return;
       case 'inicio':
         registro.aba = m.aba;
         registro.aoEvento({ tipo: 'inicio', aba: m.aba, conversaId: m.conversaId });

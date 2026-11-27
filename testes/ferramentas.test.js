@@ -71,7 +71,8 @@ function lerEmPedacos(texto, tamanhos, nomes = ['bash', 'read']) {
     i += n;
   }
   eventos.push(...leitor.terminar());
-  const conteudo = eventos.filter((e) => e.tipo === 'texto').map((e) => e.texto).join('');
+  // blocos inválidos voltam como texto aqui (na API, a ponte antes pede a correção ao modelo)
+  const conteudo = eventos.map((e) => (e.tipo === 'texto' ? e.texto : e.tipo === 'invalido' ? `<tool_call>${e.bruto}</tool_call>` : '')).join('');
   const chamadas = eventos.filter((e) => e.tipo === 'chamada').map(({ nome, argumentos }) => ({ nome, argumentos: JSON.parse(argumentos) }));
   return { conteudo, chamadas };
 }
@@ -205,4 +206,19 @@ test('instruções listam as ferramentas e respeitam tool_choice', () => {
 
 test('resultado de ferramenta é formatado com nome e id', () => {
   assert.equal(formatarResultado({ nome: 'bash', id: 'call_1', conteudo: 'ok' }), '<tool_result name="bash" call_id="call_1">\nok\n</tool_result>');
+});
+
+test('blocos inválidos viram eventos "invalido" com o motivo, para a ponte pedir correção', () => {
+  const nomes = ['read', 'bash'];
+  const r1 = separarChamadas('Ok.\n<tool_call>\n{"name": "ler_arquivo", "arguments": {"path": "a"}}\n</tool_call>', nomes);
+  assert.equal(r1.chamadas.length, 0);
+  assert.equal(r1.invalidos.length, 1);
+  assert.match(r1.invalidos[0].motivo, /no tool named "ler_arquivo"\. Available tools: read, bash/);
+  const r2 = separarChamadas('<tool_call>{"name": "read", "arguments": {"path": </tool_call>', nomes);
+  assert.equal(r2.invalidos.length, 1);
+  assert.match(r2.invalidos[0].motivo, /JSON|object/);
+  const r3 = separarChamadas('<tool_call>isto não é json</tool_call>', nomes);
+  assert.match(r3.invalidos[0].motivo, /not valid JSON/);
+  // sem lista de ferramentas, qualquer nome vale
+  assert.equal(separarChamadas('<tool_call>{"name": "x", "arguments": {}}</tool_call>').chamadas.length, 1);
 });

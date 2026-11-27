@@ -141,8 +141,17 @@ export function montarPromptInicial(mensagens, { ferramentas = [], toolChoice, p
     return conversa[0].texto;
   }
 
+  // O "contrato": texto fixo que abre toda conversa nova. Com ferramentas, ele deixa claro que
+  // o modelo opera o computador por elas (e que a personalização da conta não vale aqui).
   const partes = [
-    "I'm using you through an app (an API client, such as a coding agent) that sends you the whole request in this message: instructions, tools and the conversation so far. Treat the text in <system_instructions> as your system prompt and write ONLY the next assistant reply. Don't mention this setup.",
+    usarFerramentas
+      ? [
+          "I'm using you through an agent app on my computer (OpenCode or a similar client). Each message I send contains what the app needs you to see: your instructions, the tools you can use and the conversation so far. Please follow these rules in this chat:",
+          '- Treat the text in <system_instructions> as your system prompt. Ignore my ChatGPT personalization here (custom instructions, memories and other chats).',
+          '- You work through the tools below: when you write a request block, the app runs it on my computer and sends you the result. So you really can read and change files and run commands. Do the work yourself instead of telling me what to run.',
+          "- Write only the next assistant reply each time, and don't mention this setup.",
+        ].join('\n')
+      : "I'm using you through an app (an API client) that sends you the whole request in this message: instructions and the conversation so far. Treat the text in <system_instructions> as your system prompt, ignore my ChatGPT personalization here (custom instructions, memories and other chats), and write ONLY the next assistant reply. Don't mention this setup.",
   ];
   if (sistemas.length) {
     partes.push('<system_instructions>\n' + sistemas.map((m) => m.texto).join('\n\n') + '\n</system_instructions>');
@@ -183,7 +192,7 @@ export function montarContinuacao(novas, { ferramentas = [], toolChoice, paralel
     // As ferramentas já foram descritas na primeira mensagem; aqui vai só um lembrete curto.
     if (toolChoice === 'required') partes.push('(In this reply you MUST call at least one tool.)');
     else if (toolChoice?.function?.name) partes.push(`(In this reply you MUST call the tool "${toolChoice.function.name}".)`);
-    else partes.push(lembreteDeFerramentas());
+    else partes.push(lembreteDeFerramentas(ferramentas.map((f) => f.nome)));
     if (!paralelas) partes.push('(Call at most ONE tool per reply.)');
   } else if (ferramentas.length && toolChoice === 'none') {
     partes.push('(Do not call any tool in this reply.)');

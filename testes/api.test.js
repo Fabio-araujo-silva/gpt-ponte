@@ -347,3 +347,108 @@ test('fluxo do OpenCode: pedido de título em paralelo não atrapalha a continua
   assert.equal(ultima.nova, false, 'o passo depois da ferramenta deve continuar a conversa do agente');
   await p.fechar();
 });
+
+// ---------------------------------------------------------------- correções automáticas
+
+const TOOLS = [
+  { type: 'function', function: { name: 'read', parameters: { type: 'object', properties: { path: { type: 'string' } } } } },
+  { type: 'function', function: { name: 'bash', parameters: { type: 'object', properties: { command: { type: 'string' } } } } },
+];
+
+/** Extensão falsa que responde conforme uma função (tarefa) => texto. */
+async function extensaoRoteirizada(p, roteiro) {
+  return extensaoFalsa(p.ws, async (m, c) => {
+    const texto = roteiro(m);
+    c.enviar({ tipo: 'inicio', id: m.id, aba: 3, conversaId: 'c1' });
+    if (texto) c.enviar({ tipo: 'delta', id: m.id, texto });
+    c.enviar({ tipo: 'fim', id: m.id, texto, aba: 3, conversaId: 'c1' });
+  });
+}
+
+test('bloco com ferramenta inexistente: a ponte pede a correção na mesma conversa', async () => {
+  const p = await iniciarPonte();
+  const ext = await extensaoRoteirizada(p, (m) =>
+    m.nova
+      ? 'Vou ler.\n<tool_call>\n{"name": "ler_arquivo", "arguments": {"path": "a"}}\n</tool_call>'
+      : '<tool_call>\n{"name": "read", "arguments": {"path": "a"}}\n</tool_call>',
+  );
+  const j = juntarStream(await lerSSE(await pedir(p.base, { stream: true, tools: TOOLS, messages: [{ role: 'user', content: 'leia a' }] })));
+  assert.equal(j.conteudo, 'Vou ler.');
+  assert.equal(j.chamadas.length, 1);
+  assert.equal(j.chamadas[0].function.name, 'read');
+  const tarefas = ext.recebidas.filter((m) => m.tipo === 'tarefa');
+  assert.equal(tarefas.length, 2);
+  assert.equal(tarefas[1].nova, false);
+  assert.deepEqual(tarefas[1].continuar, { aba: 3, conversaId: 'c1' });
+  assert.match(tarefas[1].prompt, /no tool named "ler_arquivo"\. Available tools: read, bash/);
+  ext.conexao.fechar();
+  await p.fechar();
+});
+
+test('recusa no começo: o cliente não vê o "não tenho acesso" e recebe a chamada', async () => {
+  const p = await iniciarPonte();
+  const ext = await extensaoRoteirizada(p, (m) =>
+    m.nova ? 'Não tenho acesso ao seu computador, mas você pode rodar `ls` no terminal.' : '<tool_call>{"name": "bash", "arguments": {"command": "ls"}}</tool_call>',
+  );
+  const eventos = await lerSSE(await pedir(p.base, { stream: true, tools: TOOLS, messages: [{ role: 'user', content: 'liste os arquivos' }] }));
+  const j = juntarStream(eventos);
+  assert.doesNotMatch(j.conteudo, /acesso/);
+  assert.equal(j.chamadas[0].function.name, 'bash');
+  assert.ok(eventos.some((e) => e.choices?.[0]?.delta?.reasoning_content?.includes('não tinha acesso')), 'o andamento avisa a correção');
+  assert.match(ext.recebidas.filter((m) => m.tipo === 'tarefa')[1].prompt, /You do have access here/);
+  ext.conexao.fechar();
+  await p.fechar();
+});
+
+test('depois de um resultado de ferramenta, "não consigo acessar" é resposta legítima', async () => {
+  const p = await iniciarPonte();
+  const ext = await extensaoRoteirizada(p, () => 'Não consigo acessar esse arquivo: ele não existe.');
+  const c = await (
+    await pedir(p.base, {
+      tools: TOOLS,
+      messages: [
+        { role: 'user', content: 'leia x' },
+        { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'read', arguments: '{"path":"x"}' } }] },
+        { role: 'tool', tool_call_id: 'c1', content: 'Erro: arquivo não encontrado' },
+      ],
+    })
+  ).json();
+  assert.equal(c.choices[0].message.content, 'Não consigo acessar esse arquivo: ele não existe.');
+  assert.equal(ext.recebidas.filter((m) => m.tipo === 'tarefa').length, 1);
+  ext.conexao.fechar();
+  await p.fechar();
+});
+
+test('resposta vazia: a ponte pede de novo uma vez', async () => {
+  const p = await iniciarPonte();
+  const ext = await extensaoRoteirizada(p, (m) => (m.nova ? '' : 'Agora sim.'));
+  const c = await (await pedir(p.base, { messages: [{ role: 'user', content: 'oi' }] })).json();
+  assert.equal(c.choices[0].message.content, 'Agora sim.');
+  assert.match(ext.recebidas.filter((m) => m.tipo === 'tarefa')[1].prompt, /arrived empty/);
+  ext.conexao.fechar();
+  await p.fechar();
+});
+
+test('bloco que continua errado depois de duas correções vira texto', async () => {
+  const p = await iniciarPonte();
+  const ext = await extensaoRoteirizada(p, () => '<tool_call>{"name": "inexistente", "arguments": {}}</tool_call>');
+  const c = await (await pedir(p.base, { tools: TOOLS, messages: [{ role: 'user', content: 'faça' }] })).json();
+  assert.match(c.choices[0].message.content, /<tool_call>\{"name": "inexistente"/);
+  assert.equal(c.choices[0].finish_reason, 'stop');
+  assert.equal(ext.recebidas.filter((m) => m.tipo === 'tarefa').length, 3);
+  ext.conexao.fechar();
+  await p.fechar();
+});
+
+test('andamento: o stream mostra as etapas no reasoning_content antes do texto', async () => {
+  const p = await iniciarPonte({ simular: true });
+  const eventos = await lerSSE(await pedir(p.base, { stream: true, messages: [{ role: 'user', content: 'oi' }] }));
+  const raciocinio = eventos.map((e) => e.choices?.[0]?.delta?.reasoning_content ?? '').join('');
+  assert.match(raciocinio, /\[GPT Ponte\] abrindo uma conversa nova no ChatGPT/);
+  assert.match(raciocinio, /\[GPT Ponte\] mensagem enviada/);
+  const p2 = await iniciarPonte({ simular: true, progresso: false });
+  const eventos2 = await lerSSE(await pedir(p2.base, { stream: true, messages: [{ role: 'user', content: 'oi' }] }));
+  assert.ok(!eventos2.some((e) => e.choices?.[0]?.delta?.reasoning_content), '--sem-progresso desliga o andamento');
+  await p.fechar();
+  await p2.fechar();
+});

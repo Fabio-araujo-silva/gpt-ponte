@@ -14,6 +14,7 @@ export const PADRAO = Object.freeze({
   limiteMs: 30 * 60_000, // tempo máximo de uma resposta
   inatividadeMs: 10 * 60_000, // tempo máximo sem nenhum sinal do navegador
   reaproveitarConversas: true,
+  progresso: true, // linhas de andamento no reasoning_content enquanto o ChatGPT não escreve
   origens: [], // sites liberados para chamar a API pelo navegador (CORS)
   log: 'info',
   simular: false,
@@ -26,6 +27,7 @@ Opções:
   --chave <texto>        exige "Authorization: Bearer <texto>" nos pedidos
   --origem <url>         libera um site para chamar a API pelo navegador (pode repetir)
   --sem-reaproveitar     sempre abre conversa nova (reenvia o histórico inteiro)
+  --sem-progresso        não escreve o andamento no bloco de raciocínio do cliente
   --simular              responde sem navegador (para testar a ligação com o cliente)
   --log <nível>          debug, info, aviso ou erro
   --config <arquivo>     lê opções de um JSON (padrão: config.local.json, se existir)
@@ -94,6 +96,7 @@ export function carregarConfig({ opcoes = {}, env = process.env, raiz = RAIZ } =
   if (typeof opcoes.chave === 'string') cfg.chave = opcoes.chave;
   if (opcoes.origem !== undefined) cfg.origens = [...cfg.origens, ...[].concat(opcoes.origem).filter((o) => typeof o === 'string')];
   if (opcoes['sem-reaproveitar']) cfg.reaproveitarConversas = false;
+  if (opcoes['sem-progresso']) cfg.progresso = false;
   if (opcoes.simular) cfg.simular = true;
   if (typeof opcoes.log === 'string') cfg.log = opcoes.log;
 

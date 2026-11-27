@@ -4,6 +4,7 @@
 //   node servidor/index.js              inicia a ponte
 //   node servidor/index.js opencode     mostra (ou grava, com --instalar) a config do OpenCode
 //   node servidor/index.js teste        manda uma pergunta para a ponte que já está rodando
+//   node servidor/index.js teste --ferramentas   testa um ciclo de agente (ferramenta + continuação)
 
 import { carregarConfig, lerArgumentos, ajudaOpcoes, ehLoopback, RAIZ } from './config.js';
 import { criarPonte, VERSAO } from './app.js';
@@ -20,6 +21,7 @@ Uso:
   node servidor/index.js opencode --instalar   grava essa configuração (com backup)
   node servidor/index.js opencode --perfil     cria o perfil "só ChatGPT" (usado pelo opencode-chatgpt)
   node servidor/index.js teste ["pergunta"]    testa a ponte que já está rodando
+  node servidor/index.js teste --ferramentas   testa um ciclo de agente de verdade (2 passos)
   node servidor/index.js saude [--esperar <s>] diz se a ponte está no ar (e espera até <s> segundos)
   node servidor/index.js recarregar-extensao   recarrega a extensão (depois de atualizar os arquivos)
 ${ajudaOpcoes()}`;
@@ -146,30 +148,33 @@ async function comandoSaude(cfg, opcoes) {
   process.exit(1);
 }
 
-async function comandoTeste(cfg, pergunta) {
+const COR = process.stdout.isTTY && !process.env.NO_COLOR;
+const apagado = (t) => (COR ? `\x1b[2m${t}\x1b[0m` : t);
+
+/**
+ * Manda um pedido com stream para a ponte e junta a resposta: texto, raciocínio (onde também
+ * chegam as linhas de andamento da ponte), chamadas de ferramenta e o motivo do fim.
+ */
+async function pedirComStream(cfg, corpo, { aoTexto, aoRaciocinio } = {}) {
   const base = enderecoBase(cfg);
-  const inicio = Date.now();
-  console.log(`Perguntando à ponte em ${base}...`);
   let resposta;
   try {
     resposta = await fetch(`${base}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.chave || 'teste'}` },
-      body: JSON.stringify({ model: 'chatgpt', stream: true, messages: [{ role: 'user', content: pergunta || 'Responda só: a ponte funciona!' }] }),
+      body: JSON.stringify({ model: 'chatgpt', stream: true, ...corpo }),
     });
   } catch {
-    console.error(`Não consegui falar com a ponte em ${base}. Ela está rodando? (node servidor/index.js)`);
-    process.exit(1);
+    return { erro: `Não consegui falar com a ponte em ${base}. Ela está rodando? (node servidor/index.js)` };
   }
   if (!resposta.ok) {
-    const corpo = await resposta.json().catch(() => ({}));
-    console.error(`Erro ${resposta.status}: ${corpo?.error?.message || resposta.statusText}`);
-    process.exit(1);
+    const j = await resposta.json().catch(() => ({}));
+    return { erro: `Erro ${resposta.status}: ${j?.error?.message || resposta.statusText}` };
   }
+  const r = { id: null, texto: '', raciocinio: '', chamadas: [], fim: null, erro: null };
   const leitor = resposta.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
-  process.stdout.write('\n');
   for (;;) {
     const { done, value } = await leitor.read();
     if (done) break;
@@ -182,15 +187,123 @@ async function comandoTeste(cfg, pergunta) {
         if (!linha.startsWith('data: ') || linha === 'data: [DONE]') continue;
         const dados = JSON.parse(linha.slice(6));
         if (dados.error) {
-          console.error(`\nErro: ${dados.error.message}`);
-          process.exit(1);
+          r.erro = dados.error.message;
+          continue;
         }
-        const d = dados.choices?.[0]?.delta;
-        if (d?.content) process.stdout.write(d.content);
+        r.id ??= dados.id;
+        const escolha = dados.choices?.[0];
+        const d = escolha?.delta;
+        if (d?.content) {
+          r.texto += d.content;
+          aoTexto?.(d.content);
+        }
+        if (d?.reasoning_content) {
+          r.raciocinio += d.reasoning_content;
+          aoRaciocinio?.(d.reasoning_content);
+        }
+        for (const c of d?.tool_calls ?? []) {
+          const ch = (r.chamadas[c.index ?? 0] ??= { id: '', nome: '', argumentos: '' });
+          if (c.id) ch.id = c.id;
+          if (c.function?.name) ch.nome += c.function.name;
+          if (c.function?.arguments) ch.argumentos += c.function.arguments;
+        }
+        if (escolha?.finish_reason) r.fim = escolha.finish_reason;
       }
     }
   }
+  return r;
+}
+
+async function comandoTeste(cfg, pergunta) {
+  const inicio = Date.now();
+  console.log(`Perguntando à ponte em ${enderecoBase(cfg)}...\n`);
+  const r = await pedirComStream(
+    cfg,
+    { messages: [{ role: 'user', content: pergunta || 'Responda só: a ponte funciona!' }] },
+    { aoTexto: (t) => process.stdout.write(t), aoRaciocinio: (t) => process.stdout.write(apagado(t)) },
+  );
+  if (r.erro) {
+    console.error(`\n${r.erro}`);
+    process.exit(1);
+  }
   console.log(`\n\n(${((Date.now() - inicio) / 1000).toFixed(1)} s)`);
+}
+
+/**
+ * Teste de agente de ponta a ponta, como um cliente tipo OpenCode faria: (1) o modelo tem uma
+ * ferramenta e precisa pedi-la; (2) recebe o resultado e responde com o que só estava nele.
+ * Depois confere no /estado que cada passo foi ao navegador uma vez só e que o segundo
+ * continuou a conversa do primeiro (em vez de reenviar tudo).
+ */
+async function comandoTesteFerramentas(cfg) {
+  const base = enderecoBase(cfg);
+  const palavra = `LARANJA-${10 + Math.floor(Math.random() * 90)}`;
+  const tools = [
+    {
+      type: 'function',
+      function: {
+        name: 'read',
+        description: 'Reads a file from the project folder and returns its contents.',
+        parameters: { type: 'object', properties: { filePath: { type: 'string', description: 'Path of the file to read' } }, required: ['filePath'] },
+      },
+    },
+  ];
+  const messages = [
+    { role: 'system', content: "You are a coding agent working in the user's project folder. Look at the files with your tools before answering." },
+    { role: 'user', content: 'Qual é a palavra-código escrita no arquivo notas.txt? Responda só com ela.' },
+  ];
+  const andamento = { aoRaciocinio: (t) => process.stdout.write(apagado(t)) };
+  const antes = await fetch(`${base}/estado`).then((x) => x.json()).catch(() => null);
+  if (!antes) {
+    console.error(`A ponte não está rodando em ${base}. (node servidor/index.js)`);
+    process.exit(1);
+  }
+  // No modo simulação (sem navegador) o simulador só chama ferramentas quando a mensagem pede.
+  if (antes.simulado) messages[1].content += '\n/ferramenta read {"filePath": "notas.txt"}';
+  else if (!antes.navegador?.conectada) console.log('A extensão ainda não está conectada: a ponte espera por ela até 30 s.\n');
+  const falhar = (msg) => {
+    console.error(`\n✗ ${msg}`);
+    process.exit(1);
+  };
+  console.log(`Teste de agente na ponte em ${base}: o modelo precisa pedir a ferramenta "read" e depois usar o resultado.\n`);
+
+  let t = Date.now();
+  const r1 = await pedirComStream(cfg, { messages, tools }, andamento);
+  if (r1.erro) falhar(`Passo 1: ${r1.erro}`);
+  const chamada = r1.chamadas[0];
+  if (!chamada?.nome) falhar(`Passo 1: o modelo respondeu sem pedir a ferramenta:\n${r1.texto.trim().slice(0, 600)}`);
+  console.log(`\n✓ 1/2: pediu ${chamada.nome}(${chamada.argumentos}) em ${((Date.now() - t) / 1000).toFixed(1)} s\n`);
+
+  messages.push({ role: 'assistant', content: r1.texto.trim() || null, tool_calls: [{ id: chamada.id, type: 'function', function: { name: chamada.nome, arguments: chamada.argumentos } }] });
+  messages.push({ role: 'tool', tool_call_id: chamada.id, content: `Anotações do projeto\nA palavra-código é ${palavra}.\n` });
+  t = Date.now();
+  const r2 = await pedirComStream(cfg, { messages, tools }, andamento);
+  if (r2.erro) falhar(`Passo 2: ${r2.erro}`);
+  if (!r2.texto.includes(palavra)) falhar(`Passo 2: a resposta não trouxe a palavra-código (${palavra}):\n${(r2.texto || '(vazia)').trim().slice(0, 600)}`);
+  console.log(`\n✓ 2/2: respondeu "${r2.texto.replace(/\s+/g, ' ').trim().slice(0, 100)}" em ${((Date.now() - t) / 1000).toFixed(1)} s\n`);
+
+  // Como a ponte atendeu cada passo.
+  const estado = await fetch(`${base}/estado`).then((x) => x.json()).catch(() => null);
+  const p1 = estado?.pedidos?.find((p) => p.id === r1.id);
+  const p2 = estado?.pedidos?.find((p) => p.id === r2.id);
+  if (!p1 || !p2) {
+    console.log('As duas respostas estão certas (não consegui ler o /estado para conferir as abas).');
+    return;
+  }
+  const problemas = [];
+  const descrever = (p) => `${p.modo}, ${p.envios ?? '?'} envio(s), aba ${(p.abas ?? [p.aba]).join(', ')}${p.correcoes ? `, ${p.correcoes} correção(ões) automática(s)` : ''}`;
+  for (const [n, p] of [[1, p1], [2, p2]]) {
+    const esperado = 1 + (p.correcoes ?? 0);
+    if ((p.envios ?? 1) > esperado) problemas.push(`o passo ${n} foi ao navegador ${p.envios} vezes (o esperado era ${esperado})`);
+  }
+  if (p2.modo !== 'continuação') problemas.push('o passo 2 abriu uma conversa nova em vez de continuar a do passo 1');
+  else if (String(p2.abas ?? p2.aba) !== String(p1.abas ?? p1.aba)) problemas.push('o passo 2 foi para outra aba');
+  console.log(`Passo 1: ${descrever(p1)}\nPasso 2: ${descrever(p2)}\n`);
+  if (problemas.length) {
+    console.log(`As respostas estão certas, mas: ${problemas.join('; ')}.`);
+    process.exit(1);
+  }
+  console.log('Tudo certo: o modelo usou a ferramenta, cada passo foi ao navegador uma vez e o segundo continuou a conversa do primeiro.');
 }
 
 async function main() {
@@ -213,7 +326,7 @@ async function main() {
   const comando = posicionais[0];
   if (!comando) return iniciar(cfg);
   if (comando === 'opencode') return comandoOpenCode(cfg, opcoes);
-  if (comando === 'teste') return comandoTeste(cfg, posicionais.slice(1).join(' '));
+  if (comando === 'teste') return opcoes.ferramentas ? comandoTesteFerramentas(cfg) : comandoTeste(cfg, posicionais.slice(1).join(' '));
   if (comando === 'saude') return comandoSaude(cfg, opcoes);
   if (comando === 'recarregar-extensao') return comandoRecarregarExtensao(cfg);
   console.error(`Comando desconhecido: ${comando}\n\n${AJUDA}`);

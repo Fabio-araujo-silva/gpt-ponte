@@ -322,3 +322,25 @@ test('fila: com uma aba só, dois pedidos rodam um depois do outro', async () =>
   c.fechar();
   await p.fechar();
 });
+
+test('fluxo do OpenCode: pedido de título em paralelo não atrapalha a continuação', async () => {
+  const p = await iniciarPonte({ simular: true });
+  const tools = [{ type: 'function', function: { name: 'read', parameters: { type: 'object', properties: { path: { type: 'string' } } } } }];
+  const principal = [
+    { role: 'system', content: 'Você é um agente.' },
+    { role: 'user', content: 'Leia.\n/ferramenta read {"path": "a.txt"}' },
+  ];
+  const [r1] = await Promise.all([
+    pedir(p.base, { stream: true, tools, messages: principal }),
+    pedir(p.base, { stream: true, messages: [{ role: 'system', content: 'Gere um título.' }, { role: 'user', content: 'Leia.' }] }),
+  ]);
+  const j1 = juntarStream(await lerSSE(r1));
+  assert.equal(j1.motivo, 'tool_calls');
+  principal.push({ role: 'assistant', content: j1.conteudo, tool_calls: j1.chamadas.map((c) => ({ id: c.id, type: 'function', function: c.function })) });
+  principal.push({ role: 'tool', tool_call_id: j1.chamadas[0].id, content: 'conteúdo de a.txt' });
+  const j2 = juntarStream(await lerSSE(await pedir(p.base, { stream: true, tools, messages: principal })));
+  assert.match(j2.conteudo, /conteúdo de a\.txt/);
+  const ultima = p.ponte.executor.historico.at(-1);
+  assert.equal(ultima.nova, false, 'o passo depois da ferramenta deve continuar a conversa do agente');
+  await p.fechar();
+});

@@ -81,8 +81,10 @@ Para rodar um arquivo só: `node --test testes/ferramentas.test.js`. Para um tes
   `pagina.js`) e a extensão (onde roda o `conteudo.js`).
 - **Logs no terminal da ponte**: o content script manda mensagens importantes para a ponte
   (`[extensão] Aba 123: ...`).
-- Depois de mudar arquivos da extensão: botão de recarregar no cartão em `chrome://extensions`
-  e recarregue (ou feche) a aba de trabalho.
+- Depois de mudar arquivos da extensão: com a ponte rodando, `node servidor/index.js
+  recarregar-extensao` fecha as abas de trabalho e recarrega a extensão (a partir da 0.2.1;
+  vindo de uma versão anterior, use uma vez o botão de recarregar do cartão em
+  `chrome://extensions` e feche a aba de trabalho).
 
 ## Quando o site muda
 
@@ -124,6 +126,8 @@ possíveis; ao mudá-lo, acrescente casos em `CASOS` no `testes/ferramentas.test
 2. Se mudar o formato das mensagens entre ponte e extensão, aumente `PROTOCOLO` em
    `servidor/extensao.js` **e** em `extensao/fundo.js`.
 3. `npm test`.
-4. Teste ao vivo: ponte + extensão recarregada + `node servidor/index.js teste` e um ciclo de
-   ferramenta no OpenCode.
+4. Teste ao vivo, com o ChatGPT logado: ponte + `recarregar-extensao` + `node servidor/index.js
+   teste` e uma sessão do OpenCode que use ferramentas por vários passos. No monitor, confira
+   que cada pedido aparece uma vez só (o título da sessão é um pedido à parte), que os passos
+   seguintes saem como continuação (↪) e que nenhuma aba foi tirada de outra conversa.
 5. Commit, tag (`git tag v0.2.0`) e push.

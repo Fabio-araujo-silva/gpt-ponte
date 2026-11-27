@@ -21,6 +21,7 @@ navegador.
 - [A resposta veio vazia](#a-resposta-veio-vazia)
 - [Não encontrei o campo de mensagem / a página mudou](#não-encontrei-o-campo-de-mensagem--a-página-mudou)
 - [A aba de trabalho mostra só "GPTPONTE..."](#a-aba-de-trabalho-mostra-só-gptponte)
+- [O mesmo pedido aparece em duas abas](#o-mesmo-pedido-aparece-em-duas-abas)
 - [Toda resposta abre conversa nova](#toda-resposta-abre-conversa-nova)
 - [Respostas lentas ou tempo esgotado](#respostas-lentas-ou-tempo-esgotado)
 - [Erro 403: origem não permitida](#erro-403-origem-não-permitida)
@@ -126,8 +127,19 @@ ChatGPT no lugar dele (veja [como-funciona.md](como-funciona.md#o-marcador)). A 
 aparece como o marcador e a resposta é ao pedido completo.
 
 Se o ChatGPT responder **ao marcador** ("o que você quer que eu faça com GPTPONTE...?"), a
-troca falhou. A extensão percebe, passa aquela aba para o modo *Digitar* e a ponte repete o
-pedido. Se acontecer sempre, escolha *Digitar o texto no campo* no popup.
+troca falhou. Quando o script da página vê o pedido sair sem a troca, a extensão passa aquela
+aba para o modo *Digitar* e a ponte repete o pedido uma vez, na mesma aba. Se acontecer
+sempre, escolha *Digitar o texto no campo* no popup.
+
+## O mesmo pedido aparece em duas abas
+
+No começo de uma sessão do OpenCode saem **dois pedidos diferentes** ao mesmo tempo: a
+mensagem do agente e o pedido do título da sessão (no monitor, "título da sessão"). Isso é
+normal, e com 2 abas cada um vai para a sua.
+
+Se o **mesmo** prompt aparece em duas abas, você está com a extensão 0.2.0: nela, o plano B do
+marcador tinha um falso alarme e repetia o pedido em outra aba. Atualize (veja
+[instalacao.md](instalacao.md#atualizar)).
 
 ## Toda resposta abre conversa nova
 

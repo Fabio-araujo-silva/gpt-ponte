@@ -166,9 +166,12 @@ conecta na hora).
 
 1. Baixe a versão nova (ZIP por cima da pasta antiga, ou `git pull`).
 2. Reinicie a ponte (feche a janela e abra o `iniciar.bat` de novo).
-3. Em `chrome://extensions`, clique no botão de **recarregar** (seta circular) do cartão da
-   GPT Ponte.
-4. Feche a aba de trabalho do ChatGPT; a extensão abre uma nova no próximo pedido.
+3. Recarregue a extensão. Com a ponte rodando, `node servidor/index.js recarregar-extensao` faz
+   isso e fecha as abas de trabalho (a partir da 0.2.1). Vindo de uma versão anterior, faça uma
+   vez à mão: em `chrome://extensions`, clique no botão de **recarregar** (seta circular) do
+   cartão da GPT Ponte.
+4. Se fez à mão, feche as abas de trabalho do ChatGPT (as fixadas); a extensão abre novas no
+   próximo pedido.
 
 A ponte e a extensão conversam por um protocolo numerado; se as versões não combinarem, a
 ponte avisa no terminal.

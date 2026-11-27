@@ -15,6 +15,7 @@ node servidor/index.js opencode [--instalar]     mostra/grava a configuração d
 node servidor/index.js opencode --perfil [pasta] cria o perfil "só ChatGPT" do OpenCode
 node servidor/index.js teste ["pergunta"]        pergunta algo à ponte que já está rodando
 node servidor/index.js saude [--esperar <s>]     diz se a ponte está no ar (código de saída 0/1)
+node servidor/index.js recarregar-extensao       recarrega a extensão (pega o código novo da pasta)
 node servidor/index.js --ajuda                   ajuda
 node servidor/index.js --versao                  versão
 ```
@@ -76,9 +77,11 @@ Configurações da extensão (popup → Configurações):
 | `GET /v1/models/{id}` | Um modelo. |
 | `POST /v1/chat/completions` | Chat Completions, com e sem stream. |
 | `GET /extensao` (WebSocket) | Conexão da extensão. Só aceita `Origin` de extensão. |
+| `POST /extensao/recarregar` | Pede à extensão conectada (0.2.1 ou mais nova) que feche as abas de trabalho e se recarregue. `503` se ela não está conectada. |
 
 As rotas também respondem sem o prefixo `/v1` (`/chat/completions`, `/models`). As rotas da
-API exigem a chave quando ela está configurada; o painel, `/estado` e `/saude` não.
+API e `/extensao/recarregar` exigem a chave quando ela está configurada; o painel, `/estado` e
+`/saude` não.
 
 ## POST /v1/chat/completions
 
@@ -175,7 +178,7 @@ Formato (o mesmo da OpenAI):
 | 502 | `chatgpt` | O site devolveu um erro. |
 | 502 | `sem_resposta` | A resposta veio vazia. |
 | 502 | `pagina_mudou` | A extensão não achou o campo ou o botão (o site mudou?). |
-| 502 | `reenviar` | A mensagem saiu sem a troca do marcador (a ponte já repetiu uma vez). |
+| 502 | `reenviar` | A mensagem saiu sem a troca do marcador (a ponte já repetiu uma vez, na mesma aba). |
 | 503 | `sem_extensao` | A extensão não conectou a tempo. |
 | 503 | `extensao_desconectada` | A extensão caiu no meio da resposta. |
 | 503 | `verificacao` | O site pediu captcha: resolva na aba de trabalho. |
@@ -197,7 +200,7 @@ WebSocket em `ws://127.0.0.1:<porta>/extensao`, mensagens JSON. Versão do proto
 | `inicio` | `id`, `aba`, `conversaId` | A resposta começou a chegar. |
 | `delta` | `id`, `texto`, `raciocinio` | Texto novo (só o que cresceu). |
 | `fim` | `id`, `texto`, `raciocinio`, `aba`, `conversaId`, `modelo` | Resposta completa (o `texto` final vale mais que a soma dos deltas). |
-| `erro` | `id`, `codigo`, `mensagem` | A tarefa falhou (códigos da tabela de erros). |
+| `erro` | `id`, `codigo`, `mensagem`, `aba` | A tarefa falhou (códigos da tabela de erros). A ponte usa `aba` para repetir na mesma aba. |
 | `pong` | `t` | Resposta ao `ping`. |
 | `log` | `nivel`, `mensagem` | Mensagem para o terminal da ponte. |
 
@@ -206,8 +209,9 @@ WebSocket em `ws://127.0.0.1:<porta>/extensao`, mensagens JSON. Versão do proto
 | `tipo` | Campos | Quando |
 |---|---|---|
 | `bemvindo` | `protocolo`, `versao` | Ao aceitar a conexão. |
-| `tarefa` | `id`, `prompt`, `nova`, `continuar: {aba, conversaId} \| null`, `modelo`, `rotulo` | Um pedido para o ChatGPT. O `rotulo` (conversa nova, continuação, correção) aparece no monitor. |
+| `tarefa` | `id`, `prompt`, `nova`, `continuar: {aba, conversaId} \| null`, `modelo`, `rotulo`, `preferirAba` | Um pedido para o ChatGPT. O `rotulo` (conversa nova, continuação, correção, título da sessão) aparece no monitor. `preferirAba` pede uma aba específica para a conversa nova (usado ao repetir uma tarefa). |
 | `cancelar` | `id` | O cliente desistiu ou o tempo acabou. |
+| `recarregar` | (nenhum) | Fecha as abas de trabalho e recarrega a extensão (`POST /extensao/recarregar`). |
 | `ping` | `t` | A cada 20 s (mantém o service worker vivo). |
 
 Só uma extensão fica conectada por vez: uma conexão nova substitui a anterior (e as respostas
@@ -222,7 +226,7 @@ Entre o content script e o script da página (`window.postMessage`, `canal: "gpt
 | conteúdo → página | `armar` (`id`, `marcador`, `prompt`) | O próximo envio de mensagem é desta tarefa. |
 | conteúdo → página | `desarmar`, `cancelar` (`id`) | Desiste da tarefa. |
 | página → conteúdo | `enviado` | O pedido de envio saiu (com a troca feita). |
-| página → conteúdo | `envio-sem-marcador` | Saiu um envio sem o marcador no corpo. |
+| página → conteúdo | `envio-sem-marcador` | O envio desta tarefa saiu sem o marcador no corpo (formato que o script não sabe editar). Se o `enviado` não chegar em 1,5 s, o content script pede `reenviar`. |
 | página → conteúdo | `stream-inicio`, `progresso`, `stream-fim`, `stream-erro` | Andamento da resposta. |
 | página → conteúdo | `erro-http` (`status`, `corpo`) | O site respondeu com erro HTTP. |
 

@@ -51,7 +51,7 @@ página podem quebrar).
    histórico. Se uma aba já tem o começo desse histórico, o pedido vira **continuação**: só as
    mensagens novas são enviadas. Senão, vira **conversa nova** com o prompt completo.
 4. `extensao.js` espera uma vaga (uma resposta por aba) e manda a tarefa pelo WebSocket:
-   `{tipo: "tarefa", id, prompt, nova, continuar, modelo}`.
+   `{tipo: "tarefa", id, prompt, nova, continuar, modelo, rotulo, preferirAba}`.
 5. `fundo.js` escolhe a aba: a que tem a conversa (continuação), ou uma aba livre, que ele
    leva para `chatgpt.com/?temporary-chat=true` (conversa nova).
 6. `conteudo.js` arma o `pagina.js` com o prompt, escreve um **marcador** curto no campo de
@@ -81,10 +81,19 @@ A troca entende corpo em JSON (o texto entra escapado), `URLSearchParams`, `Form
 `application/x-www-form-urlencoded`, `Blob`, `ArrayBuffer` e objetos `Request`. Na aba de
 trabalho você vê o marcador como a sua mensagem; a resposta é ao prompt completo.
 
-**Plano B**: se a mensagem sair sem a troca (o marcador aparece na conversa e o script da
-página não viu o envio), o content script para a geração, marca a aba para usar o modo
-**digitar** e responde `reenviar`. A ponte repete a tarefa numa conversa nova, agora com o
-texto inteiro digitado no campo. O modo também pode ser escolhido no popup.
+**Plano B**: só entra em ação com prova. Quem decide é o `pagina.js`, que vê o pedido de envio
+desta tarefa sair **sem** o marcador no corpo (num formato que ele não sabe editar) e avisa
+`envio-sem-marcador`. O content script espera 1,5 s pela confirmação da troca (`enviado`); se
+ela não vem, para a geração, marca a aba para usar o modo **digitar** e responde `reenviar`. A
+ponte repete a tarefa uma vez, **na mesma aba** (`preferirAba`), agora com o texto inteiro
+digitado no campo. O modo também pode ser escolhido no popup.
+
+Ver o marcador na tela não é sinal de falha: no app logado, o balão `GPTPONTE...` aparece
+antes de o pedido sair. (Até a 0.2.0, um vigia olhava a tela, tomava isso por falha e repetia o
+pedido em outra aba: o mesmo prompt ia duas vezes e a conversa da outra aba se perdia.)
+
+Se o pedido não sair de jeito nenhum, um vigia de 20 s desarma a tarefa e devolve
+`pagina_mudou` (ou o problema que a página mostrar), sem repetir nada.
 
 ## Lendo a resposta do site
 
@@ -261,8 +270,9 @@ nova.
   descartá-las da memória (`autoDiscardable: false`). A URL leva `gpt-ponte=1`, o que permite
   reconhecê-las mesmo depois de o service worker reiniciar.
 - **Escolha da aba**: continuação vai para a aba da conversa. Conversa nova usa, nesta ordem,
-  uma aba já aberta numa conversa nova e sem uso, uma aba nova (se ainda cabe no máximo do
-  popup) ou a aba livre usada há mais tempo.
+  a aba pedida em `preferirAba` (quando a ponte repete uma tarefa, ela volta para a aba de onde
+  veio, para não derrubar a conversa de outro pedido), uma aba já aberta numa conversa nova e
+  sem uso, uma aba nova (se ainda cabe no máximo do popup) ou a aba livre usada há mais tempo.
 - **Fila**: a ponte nunca manda mais tarefas do que o número de abas. Os pedidos excedentes
   esperam em ordem; se o cliente desistir enquanto espera, o pedido sai da fila.
 - **Service worker**: o Chrome desliga o service worker de uma extensão parada há 30 segundos.
@@ -282,8 +292,9 @@ nova.
 | Situação | O que acontece |
 |---|---|
 | Extensão não conectada | O pedido espera até 30 s; depois, `503` com instrução. |
-| A conversa a continuar sumiu (aba recarregou, fechou, deu erro) | Repete com o histórico inteiro numa conversa nova. |
-| A mensagem saiu sem a troca do marcador | A aba passa ao modo digitar e a tarefa é repetida uma vez. |
+| A conversa a continuar sumiu (aba recarregou, fechou, deu erro) | Repete com o histórico inteiro numa conversa nova, na mesma aba quando ela ainda existe. |
+| O script da página viu a mensagem sair sem a troca do marcador | A aba passa ao modo digitar e a tarefa é repetida uma vez, na mesma aba. |
+| A mensagem não saiu em 20 s | `pagina_mudou` (ou o problema mostrado na página); nada é repetido. |
 | Verificação anti-robô | `503` "resolva na aba"; a extensão não tenta resolver. |
 | Limite de uso | `429` com a mensagem do site. |
 | Mensagem grande demais | `400` com `code: "context_length_exceeded"` (o OpenCode entende e compacta). |

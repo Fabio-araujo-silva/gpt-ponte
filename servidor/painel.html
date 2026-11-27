@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPT Ponte</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --fundo: #f6f7f9; --cartao: #ffffff; --texto: #1d2129; --suave: #5f6b7a; --borda: #e2e6eb;
+    --ok: #12805c; --ok-fundo: #e3f5ee; --ruim: #b42318; --ruim-fundo: #fdecea; --espera: #9a6700; --espera-fundo: #fff4d6;
+    --destaque: #3657d6; --codigo: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fundo: #0f1115; --cartao: #171a21; --texto: #e7e9ee; --suave: #9aa4b2; --borda: #2a2f3a;
+      --ok: #4cc38a; --ok-fundo: #12291f; --ruim: #ff7b72; --ruim-fundo: #33191a; --espera: #e3b341; --espera-fundo: #2e2510;
+      --destaque: #8aa4ff; --codigo: #0b0d11;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--fundo); color: var(--texto); }
+  main { max-width: 920px; margin: 0 auto; padding: 28px 20px 60px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--suave); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .versao { color: var(--suave); font-size: 13px; }
+  .cartao { background: var(--cartao); border: 1px solid var(--borda); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .item { display: flex; flex-direction: column; gap: 2px; }
+  .rotulo { font-size: 12px; color: var(--suave); }
+  .valor { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+  .selo { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+  .selo::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .ok { color: var(--ok); background: var(--ok-fundo); }
+  .ruim { color: var(--ruim); background: var(--ruim-fundo); }
+  .espera { color: var(--espera); background: var(--espera-fundo); }
+  .dica { margin: 12px 0 0; color: var(--suave); font-size: 14px; }
+  code, pre { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 13px; }
+  code { background: var(--codigo); padding: 1px 6px; border-radius: 5px; }
+  pre { background: var(--codigo); padding: 12px 14px; border-radius: 8px; overflow: auto; margin: 8px 0 0; max-height: 360px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--borda); white-space: nowrap; }
+  th { color: var(--suave); font-weight: 600; }
+  td.erro { white-space: normal; color: var(--ruim); }
+  .vazio { color: var(--suave); font-size: 14px; }
+  textarea { width: 100%; min-height: 70px; font: inherit; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--borda); background: var(--fundo); color: var(--texto); resize: vertical; }
+  button { font: inherit; font-weight: 600; padding: 8px 16px; border-radius: 8px; border: 0; background: var(--destaque); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .55; cursor: default; }
+  button.secundario { background: transparent; color: var(--destaque); border: 1px solid var(--borda); padding: 5px 12px; font-size: 13px; }
+  .linha { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  #resposta { white-space: pre-wrap; margin-top: 12px; min-height: 1.5em; }
+  .abas { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+  .aba { display: flex; gap: 10px; align-items: center; font-size: 14px; }
+  details summary { cursor: pointer; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>GPT Ponte</h1>
+    <span class="versao" id="versao"></span>
+  </header>
+
+  <section class="cartao">
+    <h2>Navegador</h2>
+    <div class="grade">
+      <div class="item"><span class="rotulo">Extensão</span><span id="conexao" class="selo espera">verificando…</span></div>
+      <div class="item"><span class="rotulo">Conta do ChatGPT</span><span class="valor" id="conta">—</span></div>
+      <div class="item"><span class="rotulo">Respostas agora</span><span class="valor" id="ocupacao">—</span></div>
+      <div class="item"><span class="rotulo">Conversas lembradas</span><span class="valor" id="lembradas">—</span></div>
+    </div>
+    <div class="abas" id="abas"></div>
+    <p class="dica" id="dica"></p>
+  </section>
+
+  <section class="cartao">
+    <h2>Use em qualquer cliente OpenAI</h2>
+    <div class="grade">
+      <div class="item"><span class="rotulo">Base URL</span><span class="valor" id="base"></span></div>
+      <div class="item"><span class="rotulo">Modelo</span><span class="valor">chatgpt</span></div>
+      <div class="item"><span class="rotulo">Chave de API</span><span class="valor" id="chave"></span></div>
+    </div>
+    <details style="margin-top:14px">
+      <summary>Exemplo com curl</summary>
+      <pre id="curl"></pre>
+    </details>
+    <details style="margin-top:10px">
+      <summary>OpenCode</summary>
+      <p class="dica">No terminal, na pasta da ponte: <code>node servidor/index.js opencode --instalar</code>. Isso adiciona o provedor <code>gpt-ponte</code> na sua configuração (com backup). Depois escolha o modelo com <code>/models</code> no OpenCode.</p>
+    </details>
+  </section>
+
+  <section class="cartao">
+    <h2>Testar agora</h2>
+    <textarea id="pergunta">Responda em uma frase: o que é uma ponte?</textarea>
+    <div class="linha"><button id="enviar">Enviar</button><span class="rotulo" id="tempo"></span></div>
+    <div id="resposta"></div>
+  </section>
+
+  <section class="cartao">
+    <h2>Últimos pedidos</h2>
+    <div id="pedidos" class="vazio">Nenhum pedido ainda.</div>
+  </section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const base = location.origin;
+  let exigeChave = false;
+
+  function quandoRelativo(iso) {
+    const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 60) return `há ${s} s`;
+    if (s < 3600) return `há ${Math.round(s / 60)} min`;
+    return new Date(iso).toLocaleTimeString('pt-BR');
+  }
+
+  function texto(t) {
+    const span = document.createElement('span');
+    span.textContent = t;
+    return span.innerHTML;
+  }
+
+  async function atualizar() {
+    let e;
+    try {
+      e = await fetch('/estado', { cache: 'no-store' }).then((r) => r.json());
+    } catch {
+      $('conexao').className = 'selo ruim';
+      $('conexao').textContent = 'ponte fora do ar';
+      $('dica').textContent = 'A ponte parou. Rode de novo: node servidor/index.js';
+      return;
+    }
+    exigeChave = e.exigeChave;
+    $('versao').textContent = `v${e.versao}${e.simulado ? ' · modo simulação' : ''}`;
+    $('base').textContent = `${base}/v1`;
+    $('chave').textContent = e.exigeChave ? 'a configurada ao iniciar' : 'qualquer texto';
+    $('curl').textContent = `curl ${base}/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${e.exigeChave ? 'SUA_CHAVE' : 'qualquer'}" \\\n  -d '{"model": "chatgpt", "messages": [{"role": "user", "content": "Olá!"}]}'`;
+
+    const nav = e.navegador || {};
+    const conectado = !!nav.conectada;
+    $('conexao').className = 'selo ' + (conectado ? 'ok' : 'ruim');
+    $('conexao').textContent = e.simulado ? 'simulada' : conectado ? `conectada${nav.extensao?.navegador ? ' (' + nav.extensao.navegador + ')' : ''}` : 'desconectada';
+    $('conta').textContent = nav.logado === true ? (nav.plano ? `logada (${nav.plano})` : 'logada') : nav.logado === false ? 'sem login (limites menores)' : '—';
+    $('ocupacao').textContent = conectado ? `${nav.emAndamento || 0} de ${nav.capacidade || 1}${nav.naFila ? ` · ${nav.naFila} na fila` : ''}` : '—';
+    $('lembradas').textContent = String(e.conversasLembradas ?? 0);
+
+    const abas = nav.abas || [];
+    $('abas').innerHTML = abas
+      .map((a) => `<div class="aba"><span class="selo ${a.estado === 'ocupada' ? 'espera' : a.estado === 'erro' ? 'ruim' : 'ok'}">${texto(a.estado || '?')}</span><span>Aba ${a.id}${a.conversaId ? ' · conversa ' + texto(String(a.conversaId).slice(0, 8)) : ''}${a.aviso ? ' · ' + texto(a.aviso) : ''}</span></div>`)
+      .join('');
+    $('dica').textContent = e.simulado
+      ? 'Modo simulação: as respostas são geradas pela própria ponte, sem ChatGPT.'
+      : conectado
+        ? abas.length
+          ? ''
+          : 'Extensão conectada. A aba do ChatGPT abre sozinha no primeiro pedido.'
+        : 'Abra o Chrome com a extensão GPT Ponte instalada. Clicar no ícone da extensão conecta na hora.';
+
+    const pedidos = e.pedidos || [];
+    if (pedidos.length) {
+      $('pedidos').className = '';
+      $('pedidos').innerHTML =
+        '<table><thead><tr><th>Quando</th><th>Modo</th><th>Mensagens</th><th>Resultado</th><th>Duração</th></tr></thead><tbody>' +
+        pedidos
+          .map((p) => {
+            const resultado = p.status === 'ok' ? (p.chamadas ? `${p.chamadas} ferramenta(s)` : `${p.caracteres} caracteres`) : p.status === 'andamento' ? 'respondendo…' : '';
+            const dur = p.duracaoMs != null ? (p.duracaoMs / 1000).toFixed(1) + ' s' : '';
+            return `<tr><td>${quandoRelativo(p.quando)}</td><td>${texto(p.modo || '')}</td><td>${p.mensagens}</td>${p.status === 'erro' ? `<td class="erro">${texto(p.erro || 'erro')}</td>` : `<td>${resultado}</td>`}<td>${dur}</td></tr>`;
+          })
+          .join('') +
+        '</tbody></table>';
+    }
+  }
+
+  $('enviar').addEventListener('click', async () => {
+    const pergunta = $('pergunta').value.trim();
+    if (!pergunta) return;
+    let chave = 'painel';
+    if (exigeChave) {
+      chave = sessionStorage.getItem('gpt-ponte-chave') || prompt('Chave da ponte:') || '';
+      sessionStorage.setItem('gpt-ponte-chave', chave);
+    }
+    $('enviar').disabled = true;
+    $('resposta').textContent = '';
+    const inicio = Date.now();
+    $('tempo').textContent = 'esperando o ChatGPT…';
+    try {
+      const r = await fetch('/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + chave },
+        body: JSON.stringify({ model: 'chatgpt', stream: true, messages: [{ role: 'user', content: pergunta }] }),
+      });
+      if (!r.ok) {
+        const corpo = await r.json().catch(() => ({}));
+        throw new Error(corpo?.error?.message || `HTTP ${r.status}`);
+      }
+      const leitor = r.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { done, value } = await leitor.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const ev = buf.slice(0, i);
+          buf = buf.slice(i + 2);
+          for (const linha of ev.split('\n')) {
+            if (!linha.startsWith('data: ') || linha === 'data: [DONE]') continue;
+            const d = JSON.parse(linha.slice(6));
+            if (d.error) throw new Error(d.error.message);
+            const delta = d.choices?.[0]?.delta;
+            if (delta?.content) $('resposta').textContent += delta.content;
+          }
+        }
+      }
+      $('tempo').textContent = `${((Date.now() - inicio) / 1000).toFixed(1)} s`;
+    } catch (err) {
+      $('tempo').textContent = '';
+      $('resposta').textContent = 'Erro: ' + err.message;
+    } finally {
+      $('enviar').disabled = false;
+      atualizar();
+    }
+  });
+
+  atualizar();
+  setInterval(atualizar, 2000);
+</script>
+</body>
+</html>

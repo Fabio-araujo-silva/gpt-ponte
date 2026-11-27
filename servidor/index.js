@@ -5,11 +5,12 @@
 //   node servidor/index.js opencode     mostra (ou grava, com --instalar) a config do OpenCode
 //   node servidor/index.js teste        manda uma pergunta para a ponte que já está rodando
 
-import { carregarConfig, lerArgumentos, ajudaOpcoes, ehLoopback } from './config.js';
+import { carregarConfig, lerArgumentos, ajudaOpcoes, ehLoopback, RAIZ } from './config.js';
 import { criarPonte, VERSAO } from './app.js';
 import { criarLog } from './log.js';
-import { blocoV1, blocoV2, instalarNoOpenCode, arquivoDoOpenCode, versaoDoOpenCode, ID_PROVEDOR } from './opencode.js';
+import { blocoV1, blocoV2, instalarNoOpenCode, arquivoDoOpenCode, versaoDoOpenCode, criarPerfil, ID_PROVEDOR } from './opencode.js';
 import { randomBytes } from 'node:crypto';
+import path from 'node:path';
 
 const AJUDA = `GPT Ponte ${VERSAO}: o ChatGPT do seu navegador como API compatível com a da OpenAI.
 
@@ -17,7 +18,9 @@ Uso:
   node servidor/index.js [opções]          inicia a ponte
   node servidor/index.js opencode          mostra a configuração para o OpenCode
   node servidor/index.js opencode --instalar   grava essa configuração (com backup)
+  node servidor/index.js opencode --perfil     cria o perfil "só ChatGPT" (usado pelo opencode-chatgpt)
   node servidor/index.js teste ["pergunta"]    testa a ponte que já está rodando
+  node servidor/index.js saude [--esperar <s>] diz se a ponte está no ar (e espera até <s> segundos)
 ${ajudaOpcoes()}`;
 
 function enderecoBase(cfg) {
@@ -83,6 +86,13 @@ async function iniciar(cfg) {
 function comandoOpenCode(cfg, opcoes) {
   const baseURL = `${enderecoBase(cfg)}/v1`;
   const contexto = opcoes.contexto ? Number(opcoes.contexto) : undefined;
+  if (opcoes.perfil) {
+    const pasta = typeof opcoes.perfil === 'string' ? path.resolve(opcoes.perfil) : path.join(RAIZ, 'perfil-opencode');
+    const arquivo = criarPerfil({ baseURL, chave: cfg.chave, contexto, pasta });
+    console.log(`Perfil "só ChatGPT" do OpenCode criado em ${arquivo}`);
+    console.log(`Para abrir o OpenCode com ele: opencode-chatgpt.bat (Windows) ou ./opencode-chatgpt.sh, na pasta do seu projeto.`);
+    return;
+  }
   if (opcoes.instalar) {
     const r = instalarNoOpenCode({ baseURL, chave: cfg.chave, contexto, arquivo: typeof opcoes.arquivo === 'string' ? opcoes.arquivo : undefined });
     console.log(`Provedor "${ID_PROVEDOR}" ${r.acao === 'substituido' ? 'atualizado' : 'adicionado'} em ${r.arquivo}`);
@@ -98,6 +108,26 @@ function comandoOpenCode(cfg, opcoes) {
   console.log(`Arquivo: ${arquivoDoOpenCode()}\n`);
   console.log(JSON.stringify({ [raiz]: { [ID_PROVEDOR]: bloco } }, null, 2));
   console.log(`\nPara gravar automaticamente (com backup): node servidor/index.js opencode --instalar`);
+}
+
+/** Diz se a ponte está no ar (código de saída 0) e se a extensão está conectada. */
+async function comandoSaude(cfg, opcoes) {
+  const base = enderecoBase(cfg);
+  const esperarS = opcoes.esperar ? Number(opcoes.esperar) : 0;
+  const ate = Date.now() + esperarS * 1000;
+  for (;;) {
+    const r = await fetch(`${base}/saude`)
+      .then((x) => x.json())
+      .catch(() => null);
+    if (r?.ok) {
+      console.log(`Ponte no ar em ${base} (versão ${r.versao}); extensão ${r.navegadorConectado ? 'conectada' : 'ainda não conectada: abra o Chrome com a extensão GPT Ponte'}.`);
+      process.exit(0);
+    }
+    if (Date.now() >= ate) break;
+    await new Promise((x) => setTimeout(x, 500));
+  }
+  console.log(`A ponte não está rodando em ${base}.`);
+  process.exit(1);
 }
 
 async function comandoTeste(cfg, pergunta) {
@@ -168,6 +198,7 @@ async function main() {
   if (!comando) return iniciar(cfg);
   if (comando === 'opencode') return comandoOpenCode(cfg, opcoes);
   if (comando === 'teste') return comandoTeste(cfg, posicionais.slice(1).join(' '));
+  if (comando === 'saude') return comandoSaude(cfg, opcoes);
   console.error(`Comando desconhecido: ${comando}\n\n${AJUDA}`);
   process.exit(1);
 }

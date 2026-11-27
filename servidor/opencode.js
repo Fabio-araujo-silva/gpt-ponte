@@ -159,6 +159,32 @@ export function inserirProvedor(textoOriginal, { v2, bloco }) {
   return { texto: texto.slice(0, inicio + 1) + inserir + texto.slice(inicio + 1), acao: textoOriginal.trim() ? 'inserido' : 'criado' };
 }
 
+/**
+ * Cria um perfil separado do OpenCode (uma pasta de configuração própria) em que tudo usa a
+ * ponte: modelo principal, títulos e resumos. É lido quando o OpenCode roda com
+ * XDG_CONFIG_HOME apontando para `pasta` (o opencode-chatgpt.bat/.sh faz isso), sem tocar na
+ * configuração normal da pessoa.
+ */
+export function criarPerfil({ baseURL, chave, contexto, pasta }) {
+  const arquivo = path.join(pasta, 'opencode', 'opencode.jsonc');
+  const modelo = `${ID_PROVEDOR}/chatgpt`;
+  const conteudo = {
+    $schema: 'https://opencode.ai/config.json',
+    model: modelo,
+    small_model: modelo,
+    providers: { [ID_PROVEDOR]: blocoV2({ baseURL, chave, contexto }) },
+  };
+  fs.mkdirSync(path.dirname(arquivo), { recursive: true });
+  fs.writeFileSync(
+    arquivo,
+    '// Perfil do OpenCode que usa SÓ o ChatGPT do navegador (GPT Ponte): modelo principal e títulos.\n' +
+      '// Gerado por: node servidor/index.js opencode --perfil  (pode editar à vontade)\n' +
+      JSON.stringify(conteudo, null, 2) +
+      '\n',
+  );
+  return arquivo;
+}
+
 /** Grava a configuração com backup. Devolve o que foi feito. */
 export function instalarNoOpenCode({ baseURL, chave, contexto, arquivo = arquivoDoOpenCode(), versao = versaoDoOpenCode() }) {
   const original = fs.existsSync(arquivo) ? fs.readFileSync(arquivo, 'utf8') : '';

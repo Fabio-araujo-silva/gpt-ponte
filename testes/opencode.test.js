@@ -77,3 +77,16 @@ test('instalar grava com backup e o resultado é válido', () => {
   assert.equal(r.modelo, 'gpt-ponte/chatgpt');
   fs.rmSync(pasta, { recursive: true, force: true });
 });
+
+test('perfil "só ChatGPT": modelo e títulos na ponte, sem outros provedores', async () => {
+  const { criarPerfil } = await import('../servidor/opencode.js');
+  const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'gpt-ponte-perfil-'));
+  const arquivo = criarPerfil({ baseURL: 'http://127.0.0.1:4545/v1', pasta });
+  assert.equal(arquivo, path.join(pasta, 'opencode', 'opencode.jsonc'));
+  const lido = JSON.parse(jsoncParaJson(fs.readFileSync(arquivo, 'utf8')));
+  assert.equal(lido.model, 'gpt-ponte/chatgpt');
+  assert.equal(lido.small_model, 'gpt-ponte/chatgpt');
+  assert.deepEqual(Object.keys(lido.providers), ['gpt-ponte']);
+  assert.equal(lido.providers['gpt-ponte'].settings.baseURL, 'http://127.0.0.1:4545/v1');
+  fs.rmSync(pasta, { recursive: true, force: true });
+});

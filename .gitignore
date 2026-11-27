@@ -6,3 +6,5 @@ Thumbs.db
 config.local.json
 # pacote gerado da extensão
 *.zip
+# perfil "só ChatGPT" do OpenCode (gerado; pode ter a sua chave)
+perfil-opencode/

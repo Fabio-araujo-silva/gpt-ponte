@@ -141,6 +141,11 @@ Se o **mesmo** prompt aparece em duas abas, você está com a extensão 0.2.0: n
 marcador tinha um falso alarme e repetia o pedido em outra aba. Atualize (veja
 [instalacao.md](instalacao.md#atualizar)).
 
+Para conferir: o painel (`http://127.0.0.1:4545`) mostra "N envios" no pedido que foi mais de
+uma vez ao navegador, e o terminal mostra as abas e os envios no fim de cada resposta. Correções
+automáticas contam como envio, mas sempre na mesma aba. `node servidor/index.js teste
+--ferramentas` faz um ciclo de agente e diz se algo foi repetido.
+
 ## Toda resposta abre conversa nova
 
 No terminal, todos os pedidos aparecem com `✚` em vez de `↪`. Causas comuns:

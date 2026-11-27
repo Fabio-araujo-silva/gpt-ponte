@@ -93,7 +93,11 @@ O passo a passo com mais detalhes (e o que você deve ver em cada etapa) está e
    abra `http://127.0.0.1:4545` e use **Testar agora**, ou rode no terminal:
    ```sh
    node servidor/index.js teste "Diga olá"
+   node servidor/index.js teste --ferramentas
    ```
+   O segundo faz um ciclo de agente de verdade: o modelo pede uma ferramenta, recebe o
+   resultado e responde com o que só estava nele. No fim ele confere que cada passo foi ao
+   navegador uma vez só e que o segundo continuou a conversa do primeiro.
 
 Na primeira mensagem a extensão abre sozinha uma aba fixada do ChatGPT. Essa é a **aba de
 trabalho**: deixe-a aberta e não converse por ela (o selo no canto da página avisa).

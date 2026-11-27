@@ -221,8 +221,8 @@ versão boa.
 
 **No cliente.** Enquanto o ChatGPT não escreve, a ponte manda pedaços de
 `reasoning_content` com linhas `[GPT Ponte] ...`: fila, conversa nova ou continuação, página
-carregando, mensagem enviada (com o tamanho), "esperando o ChatGPT… N s" a cada 10 segundos e
-as correções automáticas. O OpenCode mostra isso no bloco de raciocínio ("pensando"). Quando
+carregando, mensagem enviada (com o tamanho), "esperando o ChatGPT… N s" a cada 10 segundos,
+as correções automáticas e as repetições (conversa que sumiu, troca do marcador que falhou). O OpenCode mostra isso no bloco de raciocínio ("pensando"). Quando
 o site manda o raciocínio de verdade do modelo, ele vem logo depois. As linhas de andamento
 não entram na conta de tokens. `--sem-progresso` desliga.
 

@@ -127,7 +127,8 @@ possíveis; ao mudá-lo, acrescente casos em `CASOS` no `testes/ferramentas.test
    `servidor/extensao.js` **e** em `extensao/fundo.js`.
 3. `npm test`.
 4. Teste ao vivo, com o ChatGPT logado: ponte + `recarregar-extensao` + `node servidor/index.js
-   teste` e uma sessão do OpenCode que use ferramentas por vários passos. No monitor, confira
+   teste` + `node servidor/index.js teste --ferramentas` (tem que terminar em "Tudo certo") e
+   uma sessão do OpenCode que use ferramentas por vários passos. No monitor, confira
    que cada pedido aparece uma vez só (o título da sessão é um pedido à parte), que os passos
    seguintes saem como continuação (↪) e que nenhuma aba foi tirada de outra conversa.
 5. Commit, tag (`git tag v0.2.0`) e push.

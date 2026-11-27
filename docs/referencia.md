@@ -14,6 +14,7 @@ node servidor/index.js [opções]                 inicia a ponte
 node servidor/index.js opencode [--instalar]     mostra/grava a configuração do OpenCode
 node servidor/index.js opencode --perfil [pasta] cria o perfil "só ChatGPT" do OpenCode
 node servidor/index.js teste ["pergunta"]        pergunta algo à ponte que já está rodando
+node servidor/index.js teste --ferramentas       ciclo de agente de verdade (ferramenta + continuação)
 node servidor/index.js saude [--esperar <s>]     diz se a ponte está no ar (código de saída 0/1)
 node servidor/index.js recarregar-extensao       recarrega a extensão (pega o código novo da pasta)
 node servidor/index.js --ajuda                   ajuda
@@ -71,7 +72,7 @@ Configurações da extensão (popup → Configurações):
 | Método e caminho | Descrição |
 |---|---|
 | `GET /` ou `/painel` | Painel web (estado, últimos pedidos, teste). |
-| `GET /estado` | Estado em JSON: versão, navegador, abas, últimos pedidos (só metadados). |
+| `GET /estado` | Estado em JSON: versão, navegador, abas, últimos pedidos (só metadados: modo, `envios` ao navegador, `abas` usadas, `correcoes`, duração). |
 | `GET /saude` ou `/health` | `{"ok": true, "versao": "...", "navegadorConectado": true}`. |
 | `GET /v1/models` | Lista de modelos (`chatgpt` e os que a extensão informar). |
 | `GET /v1/models/{id}` | Um modelo. |
@@ -226,6 +227,7 @@ Entre o content script e o script da página (`window.postMessage`, `canal: "gpt
 | conteúdo → página | `armar` (`id`, `marcador`, `prompt`) | O próximo envio de mensagem é desta tarefa. |
 | conteúdo → página | `desarmar`, `cancelar` (`id`) | Desiste da tarefa. |
 | página → conteúdo | `enviado` | O pedido de envio saiu (com a troca feita). |
+| página → conteúdo | `envio-fora-de-tarefa` | Saiu um envio de mensagem sem tarefa armada. Numa aba de trabalho, o content script avisa a ponte (alguém digitou nela, ou o site repetiu o envio). |
 | página → conteúdo | `envio-sem-marcador` | O envio desta tarefa saiu sem o marcador no corpo (formato que o script não sabe editar). Se o `enviado` não chegar em 1,5 s, o content script pede `reenviar`. |
 | página → conteúdo | `stream-inicio`, `progresso`, `stream-fim`, `stream-erro` | Andamento da resposta. |
 | página → conteúdo | `erro-http` (`status`, `corpo`) | O site respondeu com erro HTTP. |

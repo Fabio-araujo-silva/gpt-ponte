@@ -126,12 +126,20 @@ export class ApiOpenAI {
         );
         return { ...r, modo: 'continuação', tamanhoPrompt: plano.continuacao.prompt.length };
       } catch (e) {
-        if (e?.codigo !== 'conversa_indisponivel') throw e;
+        if (e?.codigo !== 'conversa_indisponivel' && e?.codigo !== 'reenviar') throw e;
         this.log.info('A conversa não está mais aberta no navegador; reenviando o histórico numa conversa nova.');
       }
     }
     const prompt = montarPromptInicial(plano.mensagens, plano.opcoesPrompt);
-    const r = await this.executor.executar({ prompt, nova: true, modelo }, { aoEvento, sinal, esperaMs });
+    let r;
+    try {
+      r = await this.executor.executar({ prompt, nova: true, modelo }, { aoEvento, sinal, esperaMs });
+    } catch (e) {
+      // A extensão percebeu que a mensagem saiu errada antes de qualquer resposta: repete uma vez.
+      if (e?.codigo !== 'reenviar') throw e;
+      this.log.info('A extensão pediu para repetir o envio (modo digitação); repetindo numa conversa nova.');
+      r = await this.executor.executar({ prompt, nova: true, modelo }, { aoEvento, sinal, esperaMs });
+    }
     return { ...r, modo: 'nova', tamanhoPrompt: prompt.length };
   }
 

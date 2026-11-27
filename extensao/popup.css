@@ -67,6 +67,9 @@ summary { cursor: pointer; font-weight: 600; }
 .marcar input { margin-top: 2px; }
 details .linha { margin-top: 12px; justify-content: flex-start; }
 footer { display: flex; justify-content: space-between; margin-top: 4px; }
+button.largo { width: 100%; margin-bottom: 8px; padding: 8px 12px; }
+.alternar { cursor: pointer; align-items: flex-start; }
+.alternar .interruptor { flex: none; margin-left: 0; margin-top: 2px; }
 a { color: var(--destaque); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .interruptor { margin-left: auto; position: relative; width: 34px; height: 20px; }

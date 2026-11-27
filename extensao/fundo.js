@@ -5,6 +5,8 @@
 
 'use strict';
 
+importScripts('historico.js');
+
 const PROTOCOLO = 1;
 const PADRAO = {
   endereco: 'ws://127.0.0.1:4545/extensao',
@@ -109,6 +111,7 @@ function salvarAbas() {
 const pronto = (async () => {
   await carregarConfig();
   await carregarAbas();
+  await self.Historico.carregar().catch(() => {});
   // As abas que já existiam respondem ao "info" quando o content script reconectar.
   conectar();
 })();
@@ -230,7 +233,11 @@ function tratarMensagemDaPonte(m) {
       enviarWs({ tipo: 'pong', t: m.t });
       break;
     case 'tarefa':
-      executarTarefa(m).catch((e) => enviarWs({ tipo: 'erro', id: m.id, codigo: e.codigo || 'sem_aba', mensagem: e.message }));
+      self.Historico.nova(m);
+      executarTarefa(m).catch((e) => {
+        enviarWs({ tipo: 'erro', id: m.id, codigo: e.codigo || 'sem_aba', mensagem: e.message });
+        self.Historico.atualizar(m.id, { estado: 'erro', erro: e.message, fim: Date.now() }, 'falhou');
+      });
       break;
     case 'cancelar': {
       const t = tarefas.get(m.id);
@@ -255,7 +262,18 @@ function resumoDasAbas() {
   }));
 }
 
+function estadoParaMonitor() {
+  return {
+    conectado: !!(ws && ws.readyState === WebSocket.OPEN),
+    erro: ultimoErroConexao,
+    versaoPonte,
+    config,
+    abas: resumoDasAbas(),
+  };
+}
+
 function enviarEstado() {
+  self.Historico.difundir({ tipo: 'monitor:estado', estado: estadoParaMonitor() });
   const lista = resumoDasAbas();
   const logados = lista.map((a) => a.logado).filter((v) => v !== null);
   enviarWs({
@@ -346,7 +364,13 @@ async function navegar(aba, url) {
   return esperarPronta(aba);
 }
 
-async function abaParaConversaNova(modelo) {
+function avisarAbrindoAba(idTarefa) {
+  if (!idTarefa) return;
+  enviarWs({ tipo: 'etapa', id: idTarefa, etapa: 'abrindo-aba' });
+  self.Historico.atualizar(idTarefa, { estado: 'abrindo aba' }, 'abrindo uma conversa nova no ChatGPT');
+}
+
+async function abaParaConversaNova(modelo, idTarefa) {
   const url = urlNovaConversa(modelo);
   const livres = [...abas.values()].filter((a) => a.estado !== 'ocupada' && !a.reservada);
   // 1. Uma aba já aberta numa conversa nova, ainda sem uso.
@@ -357,6 +381,7 @@ async function abaParaConversaNova(modelo) {
   }
   // 2. Ainda cabe uma aba nova.
   if (abas.size < config.maxAbas) {
+    avisarAbrindoAba(idTarefa);
     aba = await criarAba(url);
     aba.reservada = true;
     try {
@@ -371,6 +396,7 @@ async function abaParaConversaNova(modelo) {
   aba = livres.sort((x, y) => x.usadoEm - y.usadoEm)[0];
   if (!aba) throw erroComCodigo('sem_aba', 'Todas as abas do ChatGPT estão ocupadas.');
   aba.reservada = true;
+  avisarAbrindoAba(idTarefa);
   try {
     await navegar(aba, url);
   } catch (e) {
@@ -389,19 +415,42 @@ async function executarTarefa(t) {
       throw erroComCodigo('conversa_indisponivel', 'A conversa não está mais aberta no navegador.');
     }
   } else {
-    aba = await abaParaConversaNova(t.modelo);
+    aba = await abaParaConversaNova(t.modelo, t.id);
   }
   aba.reservada = false;
   aba.estado = 'ocupada';
   aba.tarefa = t.id;
   aba.virgem = false;
   aba.usadoEm = Date.now();
-  tarefas.set(t.id, { aba: aba.id });
+  tarefas.set(t.id, { aba: aba.id, tamanho: (t.prompt || '').length });
+  self.Historico.atualizar(t.id, { estado: 'enviando', aba: aba.id }, 'entregue à aba ' + aba.id);
   enviarEstado();
   aba.porta.postMessage({
     tipo: 'executar',
     tarefa: { id: t.id, prompt: t.prompt, continuar: !t.nova, modoEnvio: aba.modoEnvio || config.modoEnvio },
   });
+}
+
+/**
+ * Uma aba carregada em segundo plano às vezes não desenha o campo de mensagem até ficar
+ * visível. Traz a aba para frente por um instante e volta para a aba que estava ativa.
+ */
+async function acordarAba(aba) {
+  if (aba.acordando) return;
+  aba.acordando = true;
+  try {
+    const tab = await chrome.tabs.get(aba.id);
+    if (tab.active) return;
+    const [ativa] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
+    logPonte('info', 'Aba ' + aba.id + ': em segundo plano o ChatGPT não desenhou o campo de mensagem; trazendo a aba para frente por um instante.');
+    await chrome.tabs.update(aba.id, { active: true });
+    await new Promise((r) => setTimeout(r, 2500));
+    if (ativa && ativa.id !== aba.id) await chrome.tabs.update(ativa.id, { active: true }).catch(() => {});
+  } catch (_) {
+    /* aba fechou */
+  } finally {
+    aba.acordando = false;
+  }
 }
 
 function liberarAba(aba, idTarefa) {
@@ -414,6 +463,10 @@ function liberarAba(aba, idTarefa) {
 
 // Mensagens dos content scripts das abas.
 chrome.runtime.onConnect.addListener((porta) => {
+  if (porta.name === 'monitor') {
+    pronto.then(() => self.Historico.conectarMonitor(porta, estadoParaMonitor));
+    return;
+  }
   if (porta.name !== 'aba-chatgpt' || !porta.sender || !porta.sender.tab) return;
   const idAba = porta.sender.tab.id;
   pronto.then(() => {
@@ -468,21 +521,42 @@ function tratarMensagemDaAba(aba, porta, m) {
       logPonte('aviso', `Aba ${aba.id}: ${m.mensagem}`);
       enviarEstado();
       break;
+    case 'enviado': {
+      const t = tarefas.get(m.id);
+      enviarWs({ tipo: 'etapa', id: m.id, etapa: 'enviado', detalhe: t ? t.tamanho : undefined, aba: aba.id });
+      self.Historico.atualizar(m.id, { estado: 'aguardando', enviadoEm: Date.now() }, 'mensagem enviada ao ChatGPT');
+      break;
+    }
     case 'inicio':
       enviarWs({ tipo: 'inicio', id: m.id, aba: aba.id, conversaId: aba.conversa });
+      self.Historico.atualizar(m.id, { estado: 'respondendo' }, 'o ChatGPT começou a responder');
       break;
     case 'delta':
       enviarWs({ tipo: 'delta', id: m.id, texto: m.texto, raciocinio: m.raciocinio });
+      self.Historico.delta(m.id, m.texto, m.raciocinio);
       break;
     case 'fim':
       if (m.conversaServidor) aba.conversaServidor = m.conversaServidor;
       enviarWs({ tipo: 'fim', id: m.id, texto: m.texto, raciocinio: m.raciocinio, aba: aba.id, conversaId: aba.conversa, modelo: m.modelo });
+      self.Historico.atualizar(
+        m.id,
+        { estado: 'concluida', texto: m.texto || '', raciocinio: m.raciocinio || '', fim: Date.now(), conversaServidor: m.conversaServidor || null, modeloUsado: m.modelo || null },
+        'resposta completa',
+      );
       liberarAba(aba, m.id);
+      break;
+    case 'acordar':
+      acordarAba(aba);
       break;
     case 'erro':
       // O modo marcador falhou nesta página: daqui em diante a aba digita o texto inteiro.
       if (m.modoEnvio) aba.modoEnvio = m.modoEnvio;
       enviarWs({ tipo: 'erro', id: m.id, codigo: m.codigo, mensagem: m.mensagem });
+      self.Historico.atualizar(
+        m.id,
+        { estado: m.codigo === 'cancelado' ? 'cancelada' : 'erro', erro: m.mensagem, fim: Date.now() },
+        m.codigo === 'cancelado' ? 'cancelada' : 'erro (' + m.codigo + ')',
+      );
       if (m.codigo === 'verificacao' || m.codigo === 'sem_login') {
         aba.aviso = m.mensagem;
       }
@@ -506,6 +580,7 @@ chrome.tabs.onRemoved.addListener((idAba) => {
   resolverEsperas(aba, erroComCodigo('sem_aba', 'A aba do ChatGPT foi fechada.'));
   if (aba.tarefa) {
     enviarWs({ tipo: 'erro', id: aba.tarefa, codigo: 'sem_aba', mensagem: 'A aba do ChatGPT foi fechada no meio da resposta.' });
+    self.Historico.atualizar(aba.tarefa, { estado: 'erro', erro: 'A aba do ChatGPT foi fechada no meio da resposta.', fim: Date.now() }, 'aba fechada');
     tarefas.delete(aba.tarefa);
   }
   enviarEstado();
@@ -562,6 +637,25 @@ chrome.runtime.onMessage.addListener((msg, sender, responder) => {
         tentativas = 0;
         await conectar();
         return responder({ ok: true });
+      case 'popup:abrir-monitor': {
+        const url = chrome.runtime.getURL('monitor.html');
+        const [aberta] = await chrome.tabs.query({ url });
+        if (aberta) {
+          await chrome.tabs.update(aberta.id, { active: true });
+          await chrome.windows.update(aberta.windowId, { focused: true });
+        } else {
+          await chrome.tabs.create({ url });
+        }
+        return responder({ ok: true });
+      }
+      case 'popup:ver-aba': {
+        const aba = abas.get(msg.aba);
+        if (aba) {
+          const tab = await chrome.tabs.update(aba.id, { active: true });
+          if (tab && tab.windowId) await chrome.windows.update(tab.windowId, { focused: true });
+        }
+        return responder({ ok: !!aba });
+      }
       case 'popup:abrir-aba': {
         const existente = [...abas.values()][0];
         if (existente) {

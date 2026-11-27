@@ -171,6 +171,21 @@
     return m ? m[1] : null;
   }
 
+  /**
+   * Espera o campo de mensagem. Numa aba em segundo plano o ChatGPT às vezes não desenha o
+   * campo até a aba ficar visível; nesse caso pede ao service worker para trazê-la à frente.
+   */
+  async function esperarCampo(limiteMs) {
+    let campo = await esperar(acharCampo, Math.min(limiteMs, 8000));
+    if (campo || limiteMs <= 8000) return campo;
+    if (document.visibilityState === 'hidden') {
+      log('info', 'Campo de mensagem não apareceu com a aba escondida; pedindo para mostrá-la.');
+      enviarFundo({ tipo: 'acordar' });
+    }
+    campo = await esperar(acharCampo, limiteMs - 8000);
+    return campo;
+  }
+
   function infoDaPagina() {
     const campo = acharCampo();
     return {
@@ -276,7 +291,7 @@
       if (tarefa.continuar && urlDaConversa && location.pathname !== urlDaConversa) {
         throw erroComCodigo('conversa_indisponivel', 'A aba mudou de conversa.');
       }
-      const campo = await esperar(acharCampo, 20000);
+      const campo = await esperarCampo(25000);
       if (!campo) {
         const d = diagnosticar();
         throw erroComCodigo(d.codigo, d.mensagem);
@@ -357,6 +372,7 @@
     switch (d.tipo) {
       case 'enviado':
         atual.enviado = true;
+        enviarFundo({ tipo: 'enviado', id: d.id });
         clearTimeout(atual.vigia);
         // Do envio até o stream começar: até 2 min (o site pode fazer fila).
         atual.vigia = setTimeout(() => {
@@ -446,7 +462,10 @@
     porta.onMessage.addListener((m) => {
       if (m.tipo === 'executar') executar(m.tarefa);
       else if (m.tipo === 'cancelar') cancelar(m.id);
-      else if (m.tipo === 'info') enviarFundo(Object.assign({ tipo: 'pronta' }, infoDaPagina()));
+      else if (m.tipo === 'info') {
+        const info = infoDaPagina();
+        enviarFundo(Object.assign(info.temCampo ? { tipo: 'pronta' } : Object.assign({ tipo: 'problema' }, diagnosticar()), info));
+      }
     });
     porta.onDisconnect.addListener(() => {
       porta = null;
@@ -458,7 +477,7 @@
   }
 
   async function anunciar() {
-    const campo = await esperar(acharCampo, 30000);
+    const campo = await esperarCampo(35000);
     if (campo) {
       enviarFundo(Object.assign({ tipo: 'pronta' }, infoDaPagina()));
     } else {

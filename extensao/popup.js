@@ -23,11 +23,14 @@ function enderecoDoPainel(ws) {
 
 function preencherConfig(c) {
   $('ativo').checked = !!c.ativo;
+  $('temporario').checked = !!c.temporario;
+  $('temporario-dica').textContent = c.temporario
+    ? 'Ligado: as conversas da ponte não ficam no seu histórico nem usam a memória.'
+    : 'Desligado: as conversas da ponte aparecem no seu histórico do ChatGPT.';
   if (editando) return;
   $('endereco').value = c.endereco;
   $('maxAbas').value = String(c.maxAbas);
   $('modoEnvio').value = c.modoEnvio;
-  $('temporario').checked = !!c.temporario;
   $('fixarAbas').checked = !!c.fixarAbas;
 }
 
@@ -95,8 +98,15 @@ $('reconectar').addEventListener('click', async () => {
 });
 
 $('abrir-aba').addEventListener('click', () => pedir({ tipo: 'popup:abrir-aba' }));
+$('abrir-monitor').addEventListener('click', () => pedir({ tipo: 'popup:abrir-monitor' }));
 
-for (const id of ['endereco', 'maxAbas', 'modoEnvio', 'temporario', 'fixarAbas']) {
+// O interruptor vale na hora (só para as conversas novas; as abertas continuam como estão).
+$('temporario').addEventListener('change', async () => {
+  await pedir({ tipo: 'popup:salvar', config: { temporario: $('temporario').checked } });
+  atualizar();
+});
+
+for (const id of ['endereco', 'maxAbas', 'modoEnvio', 'fixarAbas']) {
   $(id).addEventListener('input', () => {
     editando = true;
   });
@@ -117,7 +127,6 @@ $('salvar').addEventListener('click', async () => {
       endereco,
       maxAbas: Number($('maxAbas').value),
       modoEnvio: $('modoEnvio').value,
-      temporario: $('temporario').checked,
       fixarAbas: $('fixarAbas').checked,
     },
   });

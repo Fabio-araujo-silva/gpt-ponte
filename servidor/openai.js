@@ -162,7 +162,7 @@ export class ApiOpenAI {
       this.memoria.consumir(plano.continuacao.chave);
       try {
         const r = await this.executor.executar(
-          { prompt: plano.continuacao.prompt, nova: false, continuar: plano.continuacao.info, modelo },
+          { prompt: plano.continuacao.prompt, nova: false, continuar: plano.continuacao.info, modelo, rotulo: rotuloDoPlano(plano, 'continuação') },
           { aoEvento, sinal, esperaMs },
         );
         return { ...r, modo: 'continuação', tamanhoPrompt: plano.continuacao.prompt.length };
@@ -175,12 +175,12 @@ export class ApiOpenAI {
     const prompt = montarPromptInicial(plano.mensagens, plano.opcoesPrompt);
     let r;
     try {
-      r = await this.executor.executar({ prompt, nova: true, modelo }, { aoEvento, sinal, esperaMs });
+      r = await this.executor.executar({ prompt, nova: true, modelo, rotulo: rotuloDoPlano(plano, 'conversa nova') }, { aoEvento, sinal, esperaMs });
     } catch (e) {
       // A extensão percebeu que a mensagem saiu errada antes de qualquer resposta: repete uma vez.
       if (e?.codigo !== 'reenviar') throw e;
       this.log.info('A extensão pediu para repetir o envio (modo digitação); repetindo numa conversa nova.');
-      r = await this.executor.executar({ prompt, nova: true, modelo }, { aoEvento, sinal, esperaMs });
+      r = await this.executor.executar({ prompt, nova: true, modelo, rotulo: rotuloDoPlano(plano, 'conversa nova') }, { aoEvento, sinal, esperaMs });
     }
     return { ...r, modo: 'nova', tamanhoPrompt: prompt.length };
   }
@@ -342,17 +342,19 @@ export class ApiOpenAI {
       if (rodada.invalidos.length && correcoes.bloco < 2) {
         correcoes.bloco++;
         return {
+          tipo: 'bloco de ferramenta inválido',
           aviso: `o bloco de ferramenta veio com erro (${rodada.invalidos[0].motivo}); pedindo a correção ao ChatGPT…`,
           prompt: mensagemDeCorrecao(rodada.invalidos),
         };
       }
       if (rodada.recusou && correcoes.recusa < 1) {
         correcoes.recusa++;
-        return { aviso: 'o ChatGPT disse que não tinha acesso; lembrando que as ferramentas funcionam…', prompt: mensagemContraRecusa(nomesDasFerramentas) };
+        return { tipo: 'recusa', aviso: 'o ChatGPT disse que não tinha acesso; lembrando que as ferramentas funcionam…', prompt: mensagemContraRecusa(nomesDasFerramentas) };
       }
       if (!rodada.emitiu && !rodada.invalidos.length && !rodada.recusou && !chamadas.length && !conteudo.trim() && correcoes.vazio < 1) {
         correcoes.vazio++;
         return {
+          tipo: 'resposta vazia',
           aviso: 'a resposta veio vazia; pedindo de novo…',
           prompt:
             'Your last reply arrived empty here (it may have gone to a canvas or to one of your own tools, which this app cannot see). Please write your answer, or your request block(s), directly in the chat.',
@@ -438,7 +440,13 @@ export class ApiOpenAI {
         rodada.guarda = null; // numa rodada de correção, o que vier vai para o cliente
         try {
           resultado = await this.executor.executar(
-            { prompt: correcao.prompt, nova: false, continuar: { aba: anterior.aba, conversaId: anterior.conversaId }, modelo: plano.modelo === MODELO_PADRAO ? null : plano.modelo },
+            {
+              prompt: correcao.prompt,
+              nova: false,
+              continuar: { aba: anterior.aba, conversaId: anterior.conversaId },
+              modelo: plano.modelo === MODELO_PADRAO ? null : plano.modelo,
+              rotulo: 'correção: ' + correcao.tipo,
+            },
             { aoEvento, sinal: controle.signal, esperaMs: this.config.esperaExtensaoMs ?? 30e3 },
           );
         } catch (e) {
@@ -543,6 +551,12 @@ export function resumoDoPedido(corpo) {
   const ferramentas = Array.isArray(corpo.tools) ? corpo.tools.map((t) => t?.function?.name ?? t?.type).join(',') : '';
   const outros = Object.keys(corpo).filter((k) => !['messages', 'tools', 'model'].includes(k));
   return `modelo=${corpo.model} mensagens=${msgs.length} (${papeis}) ~${tamanho} caracteres; ferramentas=[${ferramentas}]; outros campos: ${outros.map((k) => `${k}=${JSON.stringify(corpo[k])}`).join(' ')}`;
+}
+
+/** Rótulo curto de uma chamada, para o monitor da extensão. */
+function rotuloDoPlano(plano, modo) {
+  const n = plano.ferramentas.length;
+  return `${modo} · ${plano.mensagens.length} mensagens${n ? ` · ${n} ferramentas` : ''}`;
 }
 
 export function enviarJson(res, status, corpo, cabecalhos = {}) {

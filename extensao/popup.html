@@ -25,6 +25,15 @@
   </section>
 
   <section class="cartao">
+    <label class="linha alternar" title="Conversas novas em chat temporário: não aparecem no seu histórico nem usam a memória do ChatGPT">
+      <span><b>Chat temporário</b><br><span class="suave" id="temporario-dica"></span></span>
+      <span class="interruptor"><input type="checkbox" id="temporario"><span></span></span>
+    </label>
+  </section>
+
+  <button id="abrir-monitor" class="largo">Abrir o monitor das chamadas</button>
+
+  <section class="cartao">
     <div class="linha">
       <h2>Abas de trabalho</h2>
       <button id="abrir-aba" class="secundario">Abrir aba</button>
@@ -52,7 +61,6 @@
         <option value="digitar">Digitar o texto no campo</option>
       </select>
     </label>
-    <label class="marcar"><input type="checkbox" id="temporario"> Usar chats temporários (não ficam no histórico nem na memória)</label>
     <label class="marcar"><input type="checkbox" id="fixarAbas"> Fixar as abas de trabalho</label>
     <div class="linha"><button id="salvar">Salvar</button><span id="salvo" class="suave"></span></div>
   </details>

@@ -188,3 +188,22 @@ test('classificarErro', () => {
   assert.equal(A.classificarErro('Unusual activity: please verify you are human'), 'verificacao');
   assert.equal(A.classificarErro('Something went wrong', 500), 'chatgpt');
 });
+
+test('SSE: resposta escrita num canvas vira texto de reserva', () => {
+  const s = sse([
+    {
+      event: 'delta',
+      data: {
+        p: '',
+        o: 'add',
+        v: {
+          message: { id: 'cv', author: { role: 'assistant' }, recipient: 'canmore.create_textdoc', content: { content_type: 'code', text: '{"name": "app", "type": "code/js", "content": "console.log(1);"}' } },
+          conversation_id: 'c9',
+        },
+        c: 0,
+      },
+    },
+    '[DONE]',
+  ]);
+  assert.equal(analisar(s, 'text/event-stream').texto, 'console.log(1);');
+});

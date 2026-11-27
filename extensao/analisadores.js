@@ -146,6 +146,21 @@
       };
     }
     if (conteudo.content_type === 'reasoning_recap') return null;
+    // O modelo às vezes escreve num canvas em vez de responder no chat. A ponte não vê o
+    // canvas, mas o conteúdo vem no pedido de criação: aproveita como resposta de reserva.
+    if (papel === 'assistant' && typeof msg.recipient === 'string' && /^canmore\.(create_textdoc|update_textdoc)/.test(msg.recipient)) {
+      let dados = null;
+      try {
+        dados = JSON.parse(conteudo.text || '');
+      } catch (_) {
+        dados = null;
+      }
+      if (dados && typeof dados.content === 'string') return { tipo: 'canvas', texto: dados.content };
+      if (dados && Array.isArray(dados.updates)) {
+        const novos = dados.updates.map((u) => (u && typeof u.replacement === 'string' ? u.replacement : '')).filter(Boolean);
+        if (novos.length) return { tipo: 'canvas', texto: novos.join('\n\n') };
+      }
+    }
     return null;
   }
 
@@ -270,14 +285,17 @@
   AnalisadorSSE.prototype.resultado = function () {
     const textos = [];
     const raciocinios = [];
+    const canvas = [];
     for (const c of this.ordem) {
       const envelope = this.canais[c];
       const t = textoDaMensagem(envelope && envelope.message);
       if (!t || !t.texto) continue;
-      (t.tipo === 'texto' ? textos : raciocinios).push(t.texto);
+      if (t.tipo === 'texto') textos.push(t.texto);
+      else if (t.tipo === 'canvas') canvas.push(t.texto);
+      else raciocinios.push(t.texto);
     }
     return {
-      texto: textos.join('\n\n'),
+      texto: (textos.length ? textos : canvas).join('\n\n'),
       raciocinio: raciocinios.join('\n\n'),
       conversaId: this.conversaId,
       mensagemId: this.mensagemId,

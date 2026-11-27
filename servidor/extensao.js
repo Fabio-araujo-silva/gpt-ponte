@@ -161,6 +161,7 @@ export class GerenteDaExtensao extends EventEmitter {
         nova: !!tarefa.nova,
         continuar: tarefa.continuar ?? null,
         modelo: tarefa.modelo ?? null,
+        rotulo: tarefa.rotulo ?? null,
       });
       if (!enviado) {
         acabar();

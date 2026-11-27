@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPT Ponte · Monitor</title>
+<link rel="icon" href="icones/icone-32.png">
+<link rel="stylesheet" href="monitor.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="marca">
+      <img src="icones/icone-32.png" alt="" width="22" height="22">
+      <h1>Monitor</h1>
+      <span id="conexao" class="selo">verificando…</span>
+    </div>
+    <div class="controles">
+      <label class="interruptor-rotulo" title="Conversas novas em chat temporário: não aparecem no seu histórico nem usam a memória do ChatGPT">
+        <span>Chat temporário</span>
+        <span class="interruptor"><input type="checkbox" id="temporario"><span></span></span>
+      </label>
+      <label class="marcar" title="Seleciona sozinho a chamada mais recente">
+        <input type="checkbox" id="seguir" checked> Seguir a mais recente
+      </label>
+      <button id="limpar" class="secundario">Limpar concluídas</button>
+      <a id="painel" class="secundario botao" href="http://127.0.0.1:4545/" target="_blank">Painel da ponte</a>
+    </div>
+  </header>
+
+  <main class="grade">
+    <aside class="lista">
+      <div class="resumo" id="resumo"></div>
+      <ol id="tarefas"></ol>
+      <p id="vazio" class="suave vazio">Nenhuma chamada ainda. Mande algo pelo OpenCode (ou pelo painel da ponte) e ela aparece aqui na hora.</p>
+    </aside>
+
+    <section class="detalhe" id="detalhe" hidden>
+      <div class="cabeca">
+        <div>
+          <h2 id="d-titulo"></h2>
+          <span id="d-estado" class="selo"></span>
+        </div>
+        <button id="d-ver-aba" class="secundario">Ver a aba no ChatGPT</button>
+      </div>
+
+      <dl class="fatos" id="d-fatos"></dl>
+
+      <div id="d-erro" class="erro" hidden></div>
+
+      <h3>Etapas</h3>
+      <ol class="etapas" id="d-etapas"></ol>
+
+      <h3>Resposta <span id="d-tamanho" class="suave"></span></h3>
+      <div class="resposta" id="d-resposta"></div>
+
+      <details id="d-raciocinio-caixa" hidden>
+        <summary>Raciocínio do modelo</summary>
+        <pre class="raciocinio" id="d-raciocinio"></pre>
+      </details>
+
+      <details id="d-prompt-caixa">
+        <summary>Prompt enviado ao ChatGPT <span id="d-prompt-tamanho" class="suave"></span></summary>
+        <div class="linha"><button id="d-copiar" class="secundario">Copiar</button><span id="d-copiado" class="suave"></span></div>
+        <pre class="prompt" id="d-prompt">carregando…</pre>
+      </details>
+    </section>
+
+    <section class="detalhe nada" id="nada">
+      <p class="suave">Escolha uma chamada na lista para ver os detalhes.</p>
+    </section>
+  </main>
+<script src="monitor.js"></script>
+</body>
+</html>

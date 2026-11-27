@@ -151,6 +151,7 @@ export class ApiOpenAI {
    */
   async chatCompletions(corpo, res, sinalDoCliente) {
     const inicio = Date.now();
+    this.log.debug(`Pedido: ${resumoDoPedido(corpo)}`);
     const plano = this.planejar(corpo);
     const stream = corpo.stream === true;
     const incluirUso = stream && corpo.stream_options?.include_usage === true;
@@ -344,6 +345,17 @@ export class ApiOpenAI {
       ...(pensamento ? { completion_tokens_details: { reasoning_tokens: pensamento } } : {}),
     };
   }
+}
+
+/** Uma linha que descreve o pedido sem mostrar o conteúdo das mensagens (para o log de depuração). */
+export function resumoDoPedido(corpo) {
+  if (!corpo || typeof corpo !== 'object') return 'corpo vazio';
+  const msgs = Array.isArray(corpo.messages) ? corpo.messages : [];
+  const papeis = msgs.map((m) => m?.role?.[0] ?? '?').join('');
+  const tamanho = JSON.stringify(msgs).length;
+  const ferramentas = Array.isArray(corpo.tools) ? corpo.tools.map((t) => t?.function?.name ?? t?.type).join(',') : '';
+  const outros = Object.keys(corpo).filter((k) => !['messages', 'tools', 'model'].includes(k));
+  return `modelo=${corpo.model} mensagens=${msgs.length} (${papeis}) ~${tamanho} caracteres; ferramentas=[${ferramentas}]; outros campos: ${outros.map((k) => `${k}=${JSON.stringify(corpo[k])}`).join(' ')}`;
 }
 
 export function enviarJson(res, status, corpo, cabecalhos = {}) {

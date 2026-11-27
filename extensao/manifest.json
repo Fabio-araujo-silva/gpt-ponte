@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "GPT Ponte",
+  "version": "0.1.0",
+  "description": "Liga o ChatGPT aberto no navegador à ponte local, que o expõe como uma API compatível com a da OpenAI.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icones/icone-16.png",
+    "32": "icones/icone-32.png",
+    "48": "icones/icone-48.png",
+    "128": "icones/icone-128.png"
+  },
+  "action": {
+    "default_title": "GPT Ponte",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icones/icone-16.png",
+      "32": "icones/icone-32.png"
+    }
+  },
+  "background": {
+    "service_worker": "fundo.js"
+  },
+  "permissions": ["storage", "tabs", "alarms"],
+  "host_permissions": ["https://chatgpt.com/*", "http://127.0.0.1/*", "http://localhost/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["analisadores.js", "pagina.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["analisadores.js", "conteudo.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

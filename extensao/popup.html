@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>GPT Ponte</title>
+<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icones/icone-32.png" alt="" width="20" height="20">
+    <h1>GPT Ponte</h1>
+    <span id="versao" class="suave"></span>
+    <label class="interruptor" title="Liga ou desliga a extensão">
+      <input type="checkbox" id="ativo">
+      <span></span>
+    </label>
+  </header>
+
+  <section id="cartao-conexao" class="cartao">
+    <div class="linha">
+      <span id="selo" class="selo">verificando…</span>
+      <button id="reconectar" class="secundario" hidden>Tentar de novo</button>
+    </div>
+    <p id="detalhe" class="suave"></p>
+  </section>
+
+  <section class="cartao">
+    <div class="linha">
+      <h2>Abas de trabalho</h2>
+      <button id="abrir-aba" class="secundario">Abrir aba</button>
+    </div>
+    <ul id="abas"></ul>
+    <p id="sem-abas" class="suave">A aba do ChatGPT abre sozinha no primeiro pedido.</p>
+  </section>
+
+  <details class="cartao">
+    <summary>Configurações</summary>
+    <label class="campo">Endereço da ponte
+      <input id="endereco" type="text" spellcheck="false">
+    </label>
+    <label class="campo">Abas ao mesmo tempo
+      <select id="maxAbas">
+        <option value="1">1 (mais leve)</option>
+        <option value="2">2 (recomendado)</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+      </select>
+    </label>
+    <label class="campo">Como enviar o texto
+      <select id="modoEnvio">
+        <option value="marcador">Automático (recomendado)</option>
+        <option value="digitar">Digitar o texto no campo</option>
+      </select>
+    </label>
+    <label class="marcar"><input type="checkbox" id="temporario"> Usar chats temporários (não ficam no histórico nem na memória)</label>
+    <label class="marcar"><input type="checkbox" id="fixarAbas"> Fixar as abas de trabalho</label>
+    <div class="linha"><button id="salvar">Salvar</button><span id="salvo" class="suave"></span></div>
+  </details>
+
+  <footer>
+    <a id="painel" href="#" target="_blank">Abrir painel da ponte</a>
+    <a href="https://github.com/Fabio-araujo-silva/gpt-ponte#readme" target="_blank">Ajuda</a>
+  </footer>
+<script src="popup.js"></script>
+</body>
+</html>

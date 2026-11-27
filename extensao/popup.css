@@ -1,0 +1,77 @@
+:root {
+  color-scheme: light dark;
+  --fundo: #f6f7f9;
+  --cartao: #ffffff;
+  --texto: #1d2129;
+  --suave: #5f6b7a;
+  --borda: #e2e6eb;
+  --ok: #12805c;
+  --ok-fundo: #e3f5ee;
+  --ruim: #b42318;
+  --ruim-fundo: #fdecea;
+  --espera: #9a6700;
+  --espera-fundo: #fff4d6;
+  --destaque: #3657d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fundo: #0f1115;
+    --cartao: #171a21;
+    --texto: #e7e9ee;
+    --suave: #9aa4b2;
+    --borda: #2a2f3a;
+    --ok: #4cc38a;
+    --ok-fundo: #12291f;
+    --ruim: #ff7b72;
+    --ruim-fundo: #33191a;
+    --espera: #e3b341;
+    --espera-fundo: #2e2510;
+    --destaque: #8aa4ff;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  width: 340px;
+  margin: 0;
+  padding: 12px;
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--fundo);
+  color: var(--texto);
+}
+header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+h1 { font-size: 15px; margin: 0; }
+h2 { font-size: 12px; margin: 0; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; }
+.suave { color: var(--suave); }
+#versao { font-size: 11px; }
+.cartao { background: var(--cartao); border: 1px solid var(--borda); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.linha { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+p { margin: 6px 0 0; }
+.selo { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-weight: 600; font-size: 12px; color: var(--espera); background: var(--espera-fundo); }
+.selo::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.selo.ok { color: var(--ok); background: var(--ok-fundo); }
+.selo.ruim { color: var(--ruim); background: var(--ruim-fundo); }
+ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+li { display: flex; align-items: center; gap: 8px; }
+li .aviso { color: var(--ruim); font-size: 12px; }
+button {
+  font: inherit; font-weight: 600; padding: 6px 12px; border-radius: 7px; border: 0;
+  background: var(--destaque); color: #fff; cursor: pointer;
+}
+button.secundario { background: transparent; color: var(--destaque); border: 1px solid var(--borda); padding: 3px 10px; font-size: 12px; }
+summary { cursor: pointer; font-weight: 600; }
+.campo { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; color: var(--suave); font-size: 12px; }
+.campo input, .campo select {
+  font: inherit; color: var(--texto); background: var(--fundo); border: 1px solid var(--borda); border-radius: 6px; padding: 5px 8px;
+}
+.marcar { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; }
+.marcar input { margin-top: 2px; }
+details .linha { margin-top: 12px; justify-content: flex-start; }
+footer { display: flex; justify-content: space-between; margin-top: 4px; }
+a { color: var(--destaque); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.interruptor { margin-left: auto; position: relative; width: 34px; height: 20px; }
+.interruptor input { opacity: 0; width: 0; height: 0; }
+.interruptor span { position: absolute; inset: 0; background: var(--borda); border-radius: 999px; transition: .15s; cursor: pointer; }
+.interruptor span::before { content: ""; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .15s; }
+.interruptor input:checked + span { background: var(--ok); }
+.interruptor input:checked + span::before { transform: translateX(14px); }

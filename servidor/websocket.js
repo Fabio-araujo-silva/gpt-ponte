@@ -43,6 +43,12 @@ export class ConexaoWS extends EventEmitter {
     this._fechamentoEnviado = false;
     socket.setNoDelay?.(true);
     socket.on('data', (d) => this._receber(d));
+    // O socket do http.Server aceita "meia conexão": sem isto, um FIN do outro lado só seria
+    // percebido na próxima escrita.
+    socket.on('end', () => {
+      socket.destroy();
+      this._encerrar(1006, 'conexão encerrada pelo outro lado');
+    });
     socket.on('close', () => this._encerrar(1006, 'conexão caiu'));
     socket.on('error', (e) => {
       if (this.listenerCount('erro')) this.emit('erro', e);
